@@ -225,7 +225,7 @@ def generate_receipt_pdf(tx_data, items_data):
     buffer.seek(0)
     return buffer.getvalue()
 
-# 3. الهوية البصرية، إزالة الخطوط السفلية، محاذاة النصوص لليمين والجداول طبيعية
+# 3. الهوية البصرية، إزالة الخطوط السفلية، محاذاة النصوص لليمين والجداول طبيعية نظيفة
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
@@ -244,7 +244,6 @@ st.markdown("""
         text-align: right !important;
     }
 
-    /* جعل الجداول طبيعية بدون إجبار التوسيط */
     [data-testid="stDataFrame"] {
         direction: rtl !important;
         text-align: right !important;
@@ -485,7 +484,7 @@ if menu == "📊 لوحة المؤشرات العامة والأرصدة":
         GROUP BY p.id, p.name, p.project_type, p.status;
     """
     df_proj_summary = pd.read_sql(query_proj_summary, conn)
-    st.dataframe(df_proj_summary.fillna("-"), use_container_width=True)
+    st.dataframe(df_proj_summary.fillna("-"), use_container_width=True, hide_index=True)
 
 # ====================================================
 # 2. هيكل الشركاء ورأس المال والأرباح
@@ -545,7 +544,7 @@ elif menu == "🤝 هيكل الشركاء ورأس المال والأرباح"
         {"الشريك": "سامر ديب", "صفة الشراكة": "مساهم برأس المال وشريك", "المساهمة برأس المال": f"{samer_capital:,.2f} $", "نسبة المساهمة المالية": f"{(samer_capital/total_financial_capital*100):.1f}%", "نسبة الملكية من الشركة": f"{samer_pct:.2f}%", "الأرباح المحققة ($)": f"{(total_company_profit * samer_pct / 100.0):,.2f} $"},
         {"الشريك": "حمزة ديب", "صفة الشراكة": "شريك إداري + موظف رسمي", "المساهمة برأس المال": "0.00 $", "نسبة المساهمة المالية": "0.0%", "نسبة الملكية من الشركة": f"{hamza_pct:.2f}%", "الأرباح المحققة ($)": f"{(total_company_profit * hamza_pct / 100.0):,.2f} $"}
     ]
-    st.dataframe(pd.DataFrame(partners_breakdown), use_container_width=True)
+    st.dataframe(pd.DataFrame(partners_breakdown), use_container_width=True, hide_index=True)
 
     if user_role == "Admin":
         st.markdown("<br>", unsafe_allow_html=True)
@@ -598,7 +597,7 @@ elif menu == "📅 سجل المواعيد والزيارات":
         if filter_v_status != "الكل": query_appts += f" AND status = '{filter_v_status}'"
         query_appts += " ORDER BY visit_date DESC, visit_time DESC;"
         df_appts = pd.read_sql(query_appts, conn)
-        st.dataframe(df_appts.fillna("-"), use_container_width=True)
+        st.dataframe(df_appts.fillna("-"), use_container_width=True, hide_index=True)
 
     with tab_v_new:
         if user_role in ["Admin", "Secretary"]:
@@ -656,7 +655,7 @@ elif menu == "⏱️ جدول دوامات وساعات العمل":
         tab_att_log, tab_att_new, tab_att_rep = st.tabs(["📋 سجل الدوام الشهري", "➕ تسجيل حركة دوام", "📊 ملخص الساعات والغياب"])
         with tab_att_log:
             df_att_log = pd.read_sql("SELECT a.id AS \"المعرف\", s.name AS \"الموظف\", a.work_date AS \"التاريخ\", a.time_in AS \"وقت الحضور\", a.time_out AS \"وقت الانصراف\", a.total_hours AS \"ساعات العمل\", a.status AS \"الحالة\" FROM employee_attendance a JOIN stakeholders s ON a.employee_id = s.id ORDER BY a.work_date DESC;", conn)
-            st.dataframe(df_att_log.fillna("-"), use_container_width=True)
+            st.dataframe(df_att_log.fillna("-"), use_container_width=True, hide_index=True)
         with tab_att_new:
             if user_role in ["Admin", "Accountant"]:
                 with st.form("admin_att_form", clear_on_submit=True):
@@ -679,7 +678,7 @@ elif menu == "⏱️ جدول دوامات وساعات العمل":
                         st.rerun()
         with tab_att_rep:
             df_att_rep = pd.read_sql("SELECT s.name AS \"الموظف\", COUNT(CASE WHEN a.status = 'حاضر' THEN 1 END) AS \"أيام الحضور\", COUNT(CASE WHEN a.status = 'غياب' THEN 1 END) AS \"أيام الغياب\", COALESCE(SUM(a.total_hours), 0) AS \"إجمالي الساعات\" FROM stakeholders s LEFT JOIN employee_attendance a ON s.id = a.employee_id WHERE s.role IN ('Employee', 'Partner') GROUP BY s.id, s.name;", conn)
-            st.dataframe(df_att_rep.fillna("-"), use_container_width=True)
+            st.dataframe(df_att_rep.fillna("-"), use_container_width=True, hide_index=True)
 
 # ====================================================
 # 5. كشف حساب الموظف الذاتي
@@ -743,7 +742,7 @@ elif menu == "👤 كشف حسابي ودوامي الذاتي":
             """
             df_my_tx = pd.read_sql(q_my_tx, conn)
             if not df_my_tx.empty:
-                st.dataframe(df_my_tx.fillna("-"), use_container_width=True)
+                st.dataframe(df_my_tx.fillna("-"), use_container_width=True, hide_index=True)
             else:
                 st.info("لا توجد فواتير أو دفعات نقدية مسجلة باسمك حتى الآن.")
 
@@ -767,7 +766,7 @@ elif menu == "👤 كشف حسابي ودوامي الذاتي":
             """
             df_my_pay = pd.read_sql(q_my_pay, conn)
             if not df_my_pay.empty:
-                st.dataframe(df_my_pay.fillna("-"), use_container_width=True)
+                st.dataframe(df_my_pay.fillna("-"), use_container_width=True, hide_index=True)
             else:
                 st.info("لم يتم إغلاق مسير راتب شهري رسمي لك بعد.")
 
@@ -787,7 +786,7 @@ elif menu == "👤 كشف حسابي ودوامي الذاتي":
             """
             df_my_att = pd.read_sql(q_my_att, conn)
             if not df_my_att.empty:
-                st.dataframe(df_my_att.fillna("-"), use_container_width=True)
+                st.dataframe(df_my_att.fillna("-"), use_container_width=True, hide_index=True)
             else:
                 st.info("لا توجد قيود دوام مسجلة.")
 
@@ -840,7 +839,7 @@ elif menu == "📑 كشوفات حسابات المستثمرين":
             WHERE project_id = {proj_id} 
             ORDER BY tx_date DESC;
         """, conn)
-        st.dataframe(df_inv_tx.fillna("-"), use_container_width=True)
+        st.dataframe(df_inv_tx.fillna("-"), use_container_width=True, hide_index=True)
     else:
         st.info("لا توجد مشاريع مسجلة.")
 
@@ -1031,7 +1030,7 @@ elif menu == "📦 إدارة المخزون ومواد المشاريع":
             FROM inventory_stock 
             ORDER BY quantity_on_hand DESC;
         """, conn)
-        st.dataframe(df_stk_list.fillna("-"), use_container_width=True)
+        st.dataframe(df_stk_list.fillna("-"), use_container_width=True, hide_index=True)
     with tab_iss:
         if user_role in ["Admin", "Accountant"]:
             df_mats = pd.read_sql("SELECT item_name, quantity_on_hand, avg_unit_cost, currency FROM inventory_stock WHERE quantity_on_hand > 0;", conn)
@@ -1083,7 +1082,7 @@ elif menu == "👥 دليل وتعديل بيانات الأطراف":
             FROM stakeholders 
             ORDER BY id ASC;
         """, conn)
-        st.dataframe(df_parties_list.fillna("-"), use_container_width=True)
+        st.dataframe(df_parties_list.fillna("-"), use_container_width=True, hide_index=True)
         
         st.markdown("<br><hr>", unsafe_allow_html=True)
         st.markdown("### ✏️ تعديل الراتب الثابت ونظام العمل لأي موظف")
@@ -1174,7 +1173,7 @@ elif menu == "📑 دفتر الحركات وسجل الفواتير":
         LEFT JOIN stakeholders s ON t.stakeholder_id = s.id 
         ORDER BY t.tx_date DESC;
     """, conn)
-    st.dataframe(df_all_tx.fillna("-"), use_container_width=True)
+    st.dataframe(df_all_tx.fillna("-"), use_container_width=True, hide_index=True)
 
 # ====================================================
 # 13. إضافة حركة مالية وفاتورة
@@ -1332,7 +1331,7 @@ elif menu == "🏢 حسابات المشاريع والمستثمرين":
         GROUP BY p.id, p.name, p.status, p.management_fee_rate;
     """
     df_calc_res = pd.read_sql(q_calc, conn)
-    st.dataframe(df_calc_res.fillna("-"), use_container_width=True)
+    st.dataframe(df_calc_res.fillna("-"), use_container_width=True, hide_index=True)
 
 # ====================================================
 # 16. الإدارة والتشغيل والتعاقدات
@@ -1371,7 +1370,7 @@ elif menu == "⚙️ الإدارة والتشغيل والتعاقدات":
                 ORDER BY u.id ASC;
             """
             df_users_full = pd.read_sql(query_users_full, conn)
-            st.dataframe(df_users_full.fillna("-"), use_container_width=True)
+            st.dataframe(df_users_full.fillna("-"), use_container_width=True, hide_index=True)
 
             emps_list_df = pd.read_sql("SELECT id, name FROM stakeholders WHERE role IN ('Employee', 'Partner') ORDER BY name;", conn)
             emp_choices = ["بدون ربط (حساب عام / إداري)"] + [f"{row['name']} (رقم: {row['id']})" for _, row in emps_list_df.iterrows()]
