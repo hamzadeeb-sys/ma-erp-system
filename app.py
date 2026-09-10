@@ -93,6 +93,31 @@ def ensure_database_schema():
 
 ensure_database_schema()
 
+# سكريبت إخفاء زر Manage app وعناصر التحكم البرمجية
+st.components.v1.html("""
+<script>
+function cleanInterface() {
+    try {
+        const contexts = [document, window.parent.document];
+        contexts.forEach(doc => {
+            // إخفاء زر Manage app
+            const manageButtons = doc.querySelectorAll('[data-testid="manage-app-button"], .viewer-badge, [class*="viewerBadge"]');
+            manageButtons.forEach(el => el.style.setProperty('display', 'none', 'important'));
+
+            // إخفاء أي زر يحتوي نص Manage app
+            const allButtons = doc.querySelectorAll('button');
+            allButtons.forEach(btn => {
+                if (btn.innerText && btn.innerText.includes('Manage app')) {
+                    btn.style.setProperty('display', 'none', 'important');
+                }
+            });
+        });
+    } catch(e) {}
+}
+setInterval(cleanInterface, 400);
+</script>
+""", height=0, width=0)
+
 def get_base64_image(image_path):
     if image_path and os.path.exists(image_path):
         with open(image_path, "rb") as img_file:
@@ -205,7 +230,7 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
     * { font-family: 'Cairo', sans-serif !important; }
     
-    /* 1. إخفاء شريط أدوات Streamlit المطور (المشاركة، جيت هاب، التعديل) */
+    /* 1. إخفاء شريط أدوات ستريم ليت (جيت هاب، المشاركة، التعديل، زر Manage app) */
     [data-testid="stToolbar"],
     .stAppDeployButton,
     #MainMenu,
@@ -216,30 +241,43 @@ st.markdown("""
         visibility: hidden !important;
     }
 
-    /* 2. إبقاء الهيدر شفافاً وعدم حجب مساحة زر فتح السايد بار */
+    /* 2. إبقاء الهيدر شفافاً */
     header[data-testid="stHeader"] {
         background: transparent !important;
-        z-index: 99 !important;
     }
 
-    /* 3. ضمان ظهور زر إظهار السايد بار وسهم الفتح دائماً وبتنسيق واضح */
-    [data-testid="collapsedControl"],
-    button[data-testid="stSidebarCollapseButton"],
-    header[data-testid="stHeader"] [data-testid="collapsedControl"] {
+    /* 3. تثبيت زر إعادة فتح السايد بار ليبقى ظاهراً دائماً بلون أخضر وإطار ذهبي */
+    [data-testid="collapsedControl"] {
         display: flex !important;
         visibility: visible !important;
         opacity: 1 !important;
+        position: fixed !important;
+        top: 14px !important;
+        left: 14px !important;
         z-index: 999999 !important;
+    }
+    [data-testid="collapsedControl"] button {
         background-color: #0F4733 !important;
         color: #FFFFFF !important;
-        border-radius: 8px !important;
         border: 1.5px solid #BE9D5F !important;
+        border-radius: 8px !important;
+        box-shadow: 0 4px 12px rgba(15, 71, 51, 0.25) !important;
+        width: 42px !important;
+        height: 42px !important;
+    }
+    [data-testid="collapsedControl"] svg {
+        fill: #FFFFFF !important;
+        stroke: #FFFFFF !important;
     }
 
-    [data-testid="collapsedControl"] svg,
+    /* 4. زر إغلاق السايد بار داخل القائمة */
+    button[data-testid="stSidebarCollapseButton"] {
+        background-color: rgba(190, 157, 95, 0.2) !important;
+        border: 1px solid #BE9D5F !important;
+        border-radius: 6px !important;
+    }
     button[data-testid="stSidebarCollapseButton"] svg {
         fill: #FFFFFF !important;
-        color: #FFFFFF !important;
     }
 
     [data-testid="stIconMaterial"], .material-symbols-rounded, button[data-testid="stSidebarCollapseButton"] *, button[data-testid="collapsedControl"] * { font-family: 'Material Symbols Rounded' !important; }
@@ -988,7 +1026,7 @@ elif menu == "💳 مسيرات الرواتب الشهرية":
 
         st.caption(f"📌 نظام احتساب راتب هذا الموظف: **{type_label}**")
         col1, col2, col3, col4, col5 = st.columns(5)
-        with col1: st.metric("الراتب الأساسي", f"{base_s:,.2f} {curr_s}")
+        with col1: st.metric("الأساسي", f"{base_s:,.2f} {curr_s}")
         with col2: st.metric("إضافي الدوام", f"+{ot_val:,.2f}")
         with col3: st.metric("خصم الغياب", f"-{ded_abs_val:,.2f}")
         with col4: st.metric("سلف مسحوبة خلال الشهر", f"-{adv_taken:,.2f}", delta_color="inverse")
