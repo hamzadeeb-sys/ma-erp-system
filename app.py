@@ -225,7 +225,7 @@ def generate_receipt_pdf(tx_data, items_data):
     buffer.seek(0)
     return buffer.getvalue()
 
-# 3. الهوية البصرية وتنسيق النصوص والجداول الآمن
+# 3. الهوية البصرية، إزالة الخطوط السفلية، محاذاة النصوص لليمين والجداول طبيعية
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
@@ -244,21 +244,10 @@ st.markdown("""
         text-align: right !important;
     }
 
-    /* تنسيق آمن لعرض الجداول ومحتواها بوضوح وتوسيط */
+    /* جعل الجداول طبيعية بدون إجبار التوسيط */
     [data-testid="stDataFrame"] {
         direction: rtl !important;
-    }
-    [data-testid="stDataFrame"] table {
-        text-align: center !important;
-        width: 100% !important;
-    }
-    [data-testid="stDataFrame"] th {
-        text-align: center !important;
-        background-color: #0F4733 !important;
-        color: white !important;
-    }
-    [data-testid="stDataFrame"] td {
-        text-align: center !important;
+        text-align: right !important;
     }
     
     [data-testid="stToolbar"],
@@ -1032,7 +1021,7 @@ elif menu == "📦 إدارة المخزون ومواد المشاريع":
     st.subheader("📦 مستودع ومخزون مواد الشركة")
     tab_st, tab_iss = st.tabs(["🧱 جرد المواد", "📤 صرف مادة إلى مشروع"])
     with tab_st:
-        df_stk = pd.read_sql("""
+        df_stk_list = pd.read_sql("""
             SELECT 
                 item_name AS "اسم المادة / الصنف", 
                 category AS "التصنيف", 
@@ -1042,7 +1031,7 @@ elif menu == "📦 إدارة المخزون ومواد المشاريع":
             FROM inventory_stock 
             ORDER BY quantity_on_hand DESC;
         """, conn)
-        st.dataframe(df_stk.fillna("-"), use_container_width=True)
+        st.dataframe(df_stk_list.fillna("-"), use_container_width=True)
     with tab_iss:
         if user_role in ["Admin", "Accountant"]:
             df_mats = pd.read_sql("SELECT item_name, quantity_on_hand, avg_unit_cost, currency FROM inventory_stock WHERE quantity_on_hand > 0;", conn)
