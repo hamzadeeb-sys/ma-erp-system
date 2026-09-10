@@ -5,6 +5,7 @@ from datetime import datetime, time
 import os
 import base64
 import io
+import re
 
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
@@ -49,6 +50,31 @@ def to_excel_download_link(df, filename):
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='التقرير المالي')
     return output.getvalue()
+
+def get_next_invoice_id(conn):
+    """توليد رقم الفاتورة التسلسلي التالي تلقائياً بناءً على آخر رقم مسجل"""
+    cur = conn.cursor()
+    cur.execute("SELECT id FROM transactions WHERE id ~ '^PAY-[0-9]+' ORDER BY id DESC LIMIT 50;")
+    rows = cur.fetchall()
+    cur.close()
+    
+    max_num = 0
+    if rows:
+        for r in rows:
+            match = re.search(r'^PAY-(\d+)', str(r[0]))
+            if match:
+                num = int(match.group(1))
+                if num > max_num:
+                    max_num = num
+    if max_num > 0:
+        return f"PAY-{(max_num + 1):05d}"
+    else:
+        # احتياطاً في حال لم تكن الحركات السابقة تبدأ بـ PAY
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM transactions;")
+        cnt = cur.fetchone()[0]
+        cur.close()
+        return f"PAY-{(cnt + 1):05d}"
 
 def generate_receipt_pdf(tx_data, items_data):
     buffer = io.BytesIO()
@@ -1354,7 +1380,7 @@ elif menu == "📦 إدارة المخزون ومواد المشاريع":
         st.dataframe(df_issues, use_container_width=True)
 
 # ====================================================
-# 9. دليل وتعديل بيانات الأطراف (تمت إضافة تبويب إضافة طرف خارجي)
+# 9. دليل وتعديل بيانات الأطراف
 # ====================================================
 elif menu == "👥 دليل وتعديل بيانات الأطراف":
     st.subheader("👥 دليل كافة الأطراف والجهات والتعاملات الخارجية")
@@ -1532,7 +1558,7 @@ elif menu == "📑 دفتر الحركات وسجل الفواتير":
             st.info("سند مالي مباشر لا يتضمن بنود مواد تفصيلية.")
 
 # ====================================================
-# 11. إضافة فاتورة وحركة متعددة البنود
+# 11. إضافة فاتورة وحركة متعددة البنود (مع التوليد التلقائي لرقم الفاتورة)
 # ====================================================
 elif menu == "➕ إضافة فاتورة وحركة متعددة البنود":
     st.subheader("📄 تسجيل حركة مالية جديدة بفاتورة متعددة البنود")
@@ -1541,10 +1567,13 @@ elif menu == "➕ إضافة فاتورة وحركة متعددة البنود":
     stakeholders_df = pd.read_sql("SELECT id, name FROM stakeholders ORDER BY name;", conn)
     vaults_df = pd.read_sql("SELECT id, name, currency FROM vaults;", conn)
 
+    # توليد الرقم التالي تلقائياً
+    auto_inv_id = get_next_invoice_id(conn)
+
     st.markdown("#### 1️⃣ البيانات العامة للسند")
     c1, c2, c3 = st.columns(3)
     with c1:
-        inv_id = st.text_input("رقم الفاتورة / السند (مثال: PAY-00050)")
+        inv_id = st.text_input("رقم الفاتورة / السند (توليد تسلسلي تلقائي)", value=auto_inv_id)
         tx_date = st.date_input("تاريخ السند", datetime.now().date())
         tx_type = st.selectbox("نوع الحركة المالية", [
             "دفعة لمشروع", "شراء مواد وتخزين", "مقبوضات من مستثمر", "مصروف عام", "راتب او سلفة", "توزيع أرباح شريك", "ايراد عام"
