@@ -190,7 +190,7 @@ def generate_investor_statement_pdf(investor_name, proj_name, stats, tx_rows):
     buffer.seek(0)
     return buffer.getvalue()
 
-# 3. الهوية البصرية المنضبطة تماماً
+# 3. الهوية البصرية وضبط المسافات الرأسية لمنع تداخل شريط الأدوات
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
@@ -199,7 +199,6 @@ st.markdown("""
         font-family: 'Cairo', sans-serif !important;
     }
 
-    /* حماية خط الأيقونات وأسهم التحكم من التداخل */
     [data-testid="stIconMaterial"], 
     .material-symbols-rounded, 
     button[data-testid="stSidebarCollapseButton"] *,
@@ -207,10 +206,16 @@ st.markdown("""
         font-family: 'Material Symbols Rounded' !important;
     }
 
+    /* مسافة أمان علوية كافية لمنع الاختفاء خلف شريط المتصفح والأدوات */
     .block-container {
         direction: rtl !important;
         text-align: right !important;
-        padding-top: 2rem !important;
+        padding-top: 5rem !important;
+        padding-bottom: 3rem !important;
+    }
+
+    header[data-testid="stHeader"] {
+        background: transparent !important;
     }
 
     .stApp {
@@ -221,7 +226,6 @@ st.markdown("""
         display: none !important;
     }
 
-    /* ضبط السايد بار وإزالة الخط عند الإغلاق */
     section[data-testid="stSidebar"] {
         background-color: #0F4733 !important;
         border: none !important;
@@ -229,12 +233,10 @@ st.markdown("""
         text-align: right !important;
     }
     
-    /* يظهر الخط الذهبي فقط عندما تكون القائمة مفتوحة */
     section[data-testid="stSidebar"][aria-expanded="true"] {
         border-left: 2px solid #BE9D5F !important;
     }
 
-    /* إخفاء أي إطار نهائياً عند طي القائمة */
     section[data-testid="stSidebar"][aria-expanded="false"] {
         border: none !important;
     }
@@ -437,16 +439,16 @@ with st.sidebar:
 col_title, col_logo = st.columns([5, 1])
 with col_title:
     st.markdown("""
-        <div style="direction: rtl; text-align: right;">
+        <div style="direction: rtl; text-align: right; padding-top: 5px;">
             <h2 style="margin: 0; padding: 0; font-size: 1.7rem; color: #0F4733; font-weight: 800;">منظومة الإدارة والرقابة المالية</h2>
             <div style="color: #BE9D5F; font-size: 0.9rem; font-weight: 700; margin-top: 3px;">MA Real Estate Development &amp; Contracting</div>
         </div>
     """, unsafe_allow_html=True)
 with col_logo:
     if logo_b64:
-        st.markdown(f'<div style="text-align: left;"><img src="data:image/png;base64,{logo_b64}" style="height: 48px;"></div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="text-align: left; padding-top: 5px;"><img src="data:image/png;base64,{logo_b64}" style="height: 48px;"></div>', unsafe_allow_html=True)
 
-st.markdown("<hr style='border: 1px solid #BE9D5F; margin-top: 8px; margin-bottom: 25px;'>", unsafe_allow_html=True)
+st.markdown("<hr style='border: 1px solid #BE9D5F; margin-top: 12px; margin-bottom: 25px;'>", unsafe_allow_html=True)
 
 conn = get_connection()
 
