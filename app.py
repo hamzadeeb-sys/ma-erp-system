@@ -662,36 +662,116 @@ elif menu == "⏱️ جدول دوامات وساعات العمل":
             st.dataframe(pd.read_sql("SELECT s.name AS \"الموظف\", COUNT(CASE WHEN a.status = 'حاضر' THEN 1 END) AS \"أيام الحضور\", COUNT(CASE WHEN a.status = 'غياب' THEN 1 END) AS \"أيام الغياب\", COALESCE(SUM(a.total_hours), 0) AS \"إجمالي الساعات\" FROM stakeholders s LEFT JOIN employee_attendance a ON s.id = a.employee_id WHERE s.role IN ('Employee', 'Partner') GROUP BY s.id, s.name;", conn), use_container_width=True)
 
 # ====================================================
-# 5. كشف حساب الموظف الذاتي (المربوط)
+# 5. كشف حساب الموظف الذاتي (الشامل لكل الفواتير والرواتب والسلف)
 # ====================================================
 elif menu == "👤 كشف حسابي ودوامي الذاتي":
-    st.subheader(f"👤 ملف الموظف ودوامه الشخصي: {current_user['full_name']}")
+    st.subheader(f"👤 ملف وحساب الموظف: {current_user['full_name']}")
     emp_s_id = current_user.get("stakeholder_id")
     
     if not emp_s_id:
-        st.warning("⚠️ هذا الحساب غير مربوط حالياً بأي سجل موظف في قاعدة البيانات.")
-        st.info("يرجى مراجعة مسؤول النظام (Admin) لربط اسم المستخدم الخاص بك بملف الموظف التابع لك من شاشة إدارة الحسابات.")
+        st.warning("⚠️ هذا الحساب غير مربوط حالياً بملف موظف في قاعدة البيانات.")
+        st.info("يرجى مراجعة مسؤول النظام (Admin) لربط اسم المستخدم الخاص بك بملف الموظف من شاشة إدارة الحسابات.")
     else:
-        st.markdown("#### ⏱️ سجل دوامك الشخصي خلال الفترة")
-        q_my_att = f"""
-            SELECT work_date AS "التاريخ", time_in AS "وقت الحضور", time_out AS "وقت الانصراف", total_hours AS "الساعات المحتسبة", status AS "الحالة", notes AS "ملاحظات" 
-            FROM employee_attendance 
-            WHERE employee_id = {emp_s_id} 
-            ORDER BY work_date DESC;
-        """
-        df_my_att = pd.read_sql(q_my_att, conn)
-        st.dataframe(df_my_att, use_container_width=True)
+        # جلب البيانات المالية الأساسية للموظف
+        cur = conn.cursor()
+        cur.execute("SELECT name, salary_amount, salary_currency, role FROM stakeholders WHERE id = %s;", (emp_s_id,))
+        emp_meta = cur.fetchone()
+        
+        # حساب إجمالي المبالغ المصروفة له فعلياً في سجل الفواتير العام
+        cur.execute("""
+            SELECT COALESCE(SUM(amount), 0), COUNT(id)
+            FROM transactions
+            WHERE stakeholder_id = %s AND direction = 'OUT';
+        """, (emp_s_id,))
+        out_fin_data = cur.fetchone()
+        total_received_actual = float(out_fin_data[0]) if out_fin_data else 0.0
+        total_tx_count = int(out_fin_data[1]) if out_fin_data else 0
+        cur.close()
 
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("#### 💳 كشف مسيرات الرواتب والمستحقات")
-        q_my_pay = f"""
-            SELECT payroll_month AS "الشهر", base_salary AS "الراتب الأساسي", overtime_amount AS "قيمة الإضافي (+)", deductions AS "الخصومات (-)", net_salary AS "صافي المستحق", currency AS "العملة", payment_status AS "حالة الدفع", transaction_id AS "رقم سند الصرف" 
-            FROM payroll_records 
-            WHERE employee_id = {emp_s_id} 
-            ORDER BY payroll_month DESC;
-        """
-        df_my_pay = pd.read_sql(q_my_pay, conn)
-        st.dataframe(df_my_pay, use_container_width=True)
+        base_sal = float(emp_meta[1]) if emp_meta and emp_meta[1] else 0.0
+        curr_sal = str(emp_meta[2]) if emp_meta and emp_meta[2] else 'USD'
+
+        st.markdown("#### 💵 ملخص الوضع المالي والتعاقدي")
+        c_emp1, c_emp2, c_emp3 = st.columns(3)
+        with c_emp1:
+            st.metric("الراتب الشهري التعاقدي", f"{base_sal:,.2f} {curr_sal}")
+        with c_emp2:
+            st.metric("إجمالي المقبوض (رواتب وسلف)", f"{total_received_actual:,.2f} {curr_sal}")
+        with c_emp3:
+            st.metric("عدد الحركات والسندات المستلمة", f"{total_tx_count} سند")
+
+        st.markdown("---")
+
+        tab_emp_tx, tab_emp_pay, tab_emp_att = st.tabs([
+            "💰 كشف السندات والفواتير المستلمة (سلف، رواتب، مكافآت)",
+            "📑 مسيرات الرواتب الشهرية المعتمدة",
+            "⏱️ سجل الدوام والحضور اليومي"
+        ])
+
+        with tab_emp_tx:
+            st.markdown("##### 📜 سجل الفواتير والمبالغ النقدية المصروفة لك:")
+            q_my_tx = f"""
+                SELECT 
+                    id AS "رقم السند",
+                    tx_date AS "تاريخ الصرف",
+                    tx_type AS "نوع الحركة المالية",
+                    amount AS "المبلغ",
+                    currency AS "العملة",
+                    payment_method AS "طريقة الاستلام",
+                    description AS "البيان والتفاصيل"
+                FROM transactions
+                WHERE stakeholder_id = {emp_s_id}
+                ORDER BY tx_date DESC, id DESC;
+            """
+            df_my_tx = pd.read_sql(q_my_tx, conn)
+            if not df_my_tx.empty:
+                st.dataframe(df_my_tx, use_container_width=True)
+            else:
+                st.info("لا توجد فواتير أو دفعات نقدية مسجلة باسمك حتى الآن.")
+
+        with tab_emp_pay:
+            st.markdown("##### 💳 كشوفات مسيرات الرواتب الشهرية الرسمية:")
+            q_my_pay = f"""
+                SELECT 
+                    payroll_month AS "الشهر",
+                    base_salary AS "الراتب الأساسي",
+                    overtime_hours AS "ساعات الإضافي",
+                    overtime_amount AS "قيمة الإضافي (+)",
+                    absence_days AS "أيام الغياب",
+                    deductions AS "الخصومات (-)",
+                    net_salary AS "صافي المستلم",
+                    currency AS "العملة",
+                    payment_status AS "حالة الدفع",
+                    transaction_id AS "رقم سند الصرف" 
+                FROM payroll_records 
+                WHERE employee_id = {emp_s_id} 
+                ORDER BY payroll_month DESC;
+            """
+            df_my_pay = pd.read_sql(q_my_pay, conn)
+            if not df_my_pay.empty:
+                st.dataframe(df_my_pay, use_container_width=True)
+            else:
+                st.info("لم يتم إغلاق مسير راتب شهري رسمي لك بعد.")
+
+        with tab_emp_att:
+            st.markdown("##### ⏱️ سجل الحضور والانصراف خلال الشهر:")
+            q_my_att = f"""
+                SELECT 
+                    work_date AS "التاريخ",
+                    time_in AS "وقت الحضور",
+                    time_out AS "وقت الانصراف",
+                    total_hours AS "ساعات العمل",
+                    status AS "الحالة",
+                    notes AS "ملاحظات" 
+                FROM employee_attendance 
+                WHERE employee_id = {emp_s_id} 
+                ORDER BY work_date DESC;
+            """
+            df_my_att = pd.read_sql(q_my_att, conn)
+            if not df_my_att.empty:
+                st.dataframe(df_my_att, use_container_width=True)
+            else:
+                st.info("لا توجد قيود دوام مسجلة.")
 
 # ====================================================
 # 6. كشوفات حسابات المستثمرين
@@ -798,47 +878,64 @@ elif menu == "🖨️ طباعة السندات وتصدير التقارير":
         st.download_button("📥 تنزيل سجل الحركات Excel", data=to_excel_download_link(df_all_tx, "transactions.xlsx"), file_name="MA_Transactions.xlsx")
 
 # ====================================================
-# 9. مسيرات الرواتب الشهرية
+# 9. مسيرات الرواتب الشهرية (للمحاسب والإدارة)
 # ====================================================
 elif menu == "💳 مسيرات الرواتب الشهرية":
-    st.subheader("💳 احتساب وصرف مسيرات الرواتب")
+    st.subheader("💳 احتساب وصرف مسيرات الرواتب وخصم السلف")
     emps_sal = pd.read_sql("SELECT id, name, salary_amount, salary_currency FROM stakeholders WHERE role IN ('Employee', 'Partner') AND salary_amount > 0;", conn)
     if not emps_sal.empty:
         c1, c2 = st.columns(2)
         with c1: selected_emp = st.selectbox("الموظف", emps_sal['name'].tolist())
         with c2: p_month = st.text_input("شهر المسير (YYYY-MM)", value=datetime.now().strftime("%Y-%m"))
         emp_row = emps_sal[emps_sal['name'] == selected_emp].iloc[0]
+        emp_id = int(emp_row['id'])
         base_s = float(emp_row['salary_amount'])
         curr_s = str(emp_row['salary_currency'])
 
+        # جلب ساعات الدوام والغياب
         cur = conn.cursor()
-        cur.execute("SELECT COALESCE(SUM(overtime_hours), 0), COUNT(CASE WHEN status = 'غياب' THEN 1 END) FROM employee_attendance WHERE employee_id = %s AND TO_CHAR(work_date, 'YYYY-MM') = %s;", (int(emp_row['id']), p_month))
+        cur.execute("SELECT COALESCE(SUM(overtime_hours), 0), COUNT(CASE WHEN status = 'غياب' THEN 1 END) FROM employee_attendance WHERE employee_id = %s AND TO_CHAR(work_date, 'YYYY-MM') = %s;", (emp_id, p_month))
         att_d = cur.fetchone()
-        cur.close()
         ot_h, abs_d = float(att_d[0]), int(att_d[1])
         ot_val = ot_h * (base_s / 240.0) * 1.5
-        ded_val = abs_d * (base_s / 30.0)
-        net_s = base_s + ot_val - ded_val
+        ded_abs_val = abs_d * (base_s / 30.0)
 
-        col1, col2, col3, col4 = st.columns(4)
+        # جلب إجمالي السلف النقدية المصروفة للموظف خلال هذا الشهر
+        cur.execute("""
+            SELECT COALESCE(SUM(amount), 0)
+            FROM transactions
+            WHERE stakeholder_id = %s AND tx_type = 'راتب او سلفة' AND TO_CHAR(tx_date, 'YYYY-MM') = %s AND direction = 'OUT';
+        """, (emp_id, p_month))
+        adv_taken = float(cur.fetchone()[0] or 0.0)
+        cur.close()
+
+        total_deductions = ded_abs_val + adv_taken
+        net_s = base_s + ot_val - total_deductions
+
+        col1, col2, col3, col4, col5 = st.columns(5)
         with col1: st.metric("الأساسي", f"{base_s:,.2f} {curr_s}")
-        with col2: st.metric("إضافي", f"+{ot_val:,.2f}")
-        with col3: st.metric("خصم غياب", f"-{ded_val:,.2f}")
-        with col4: st.metric("صافي الراتب", f"{net_s:,.2f} {curr_s}")
+        with col2: st.metric("إضافي الدوام", f"+{ot_val:,.2f}")
+        with col3: st.metric("خصم الغياب", f"-{ded_abs_val:,.2f}")
+        with col4: st.metric("سلف مسحوبة خلال الشهر", f"-{adv_taken:,.2f}", delta_color="inverse")
+        with col5: st.metric("صافي الراتب المتبقي", f"{net_s:,.2f} {curr_s}")
 
         if user_role in ["Admin", "Accountant"]:
-            if st.button("🚀 اعتماد وصرف الراتب وتحديث الخزينة"):
+            if st.button("🚀 اعتماد وإغلاق مسير راتب الشهر"):
                 cur = conn.cursor()
-                sal_id = f"SAL-{p_month}-{int(emp_row['id'])}"
+                sal_id = f"SAL-{p_month}-{emp_id}"
                 v_id = 1 if curr_s == 'USD' else 2
                 cur.execute("SELECT exchange_rate FROM transactions WHERE currency = 'SYP' ORDER BY tx_date DESC LIMIT 1;")
                 s_rate = float(cur.fetchone()[0] or 131.0)
                 amt_u = net_s if curr_s == 'USD' else (net_s / s_rate)
-                cur.execute("INSERT INTO transactions (id, tx_date, tx_type, project_id, stakeholder_id, vault_id, amount, currency, exchange_rate, amount_usd, direction, payment_method, description) VALUES (%s, CURRENT_DATE, 'راتب او سلفة', 1, %s, %s, %s, %s, %s, %s, 'OUT', 'كاش', %s);", (sal_id, int(emp_row['id']), v_id, net_s, curr_s, s_rate if curr_s == 'SYP' else 1.0, amt_u, f"صرف راتب شهر {p_month}"))
-                cur.execute("INSERT INTO payroll_records (employee_id, payroll_month, base_salary, overtime_hours, overtime_amount, absence_days, deductions, net_salary, currency, payment_status, transaction_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'معتمد', %s);", (int(emp_row['id']), p_month, base_s, ot_h, ot_val, abs_d, ded_val, net_s, curr_s, sal_id))
+                
+                # تسجيل الحركة المالية لصافي المبلغ المتبقي
+                if net_s > 0:
+                    cur.execute("INSERT INTO transactions (id, tx_date, tx_type, project_id, stakeholder_id, vault_id, amount, currency, exchange_rate, amount_usd, direction, payment_method, description) VALUES (%s, CURRENT_DATE, 'راتب او سلفة', 1, %s, %s, %s, %s, %s, %s, 'OUT', 'كاش', %s);", (sal_id, emp_id, v_id, net_s, curr_s, s_rate if curr_s == 'SYP' else 1.0, amt_u, f"صرف صافي راتب شهر {p_month} بعد خصم السلف"))
+                
+                cur.execute("INSERT INTO payroll_records (employee_id, payroll_month, base_salary, overtime_hours, overtime_amount, absence_days, deductions, net_salary, currency, payment_status, transaction_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'معتمد', %s);", (emp_id, p_month, base_s, ot_h, ot_val, abs_d, total_deductions, net_s, curr_s, sal_id))
                 conn.commit()
                 cur.close()
-                st.success("تم صرف الراتب بنجاح!")
+                st.success("تم اعتماد وصرف مسير الراتب بنجاح!")
                 st.rerun()
 
 # ====================================================
@@ -919,13 +1016,13 @@ elif menu == "➕ إضافة فاتورة وحركة متعددة البنود":
             t_type = st.selectbox("نوع الحركة", ["دفعة لمشروع", "شراء مواد وتخزين", "مقبوضات من مستثمر", "مصروف عام", "راتب او سلفة", "توزيع أرباح شريك", "ايراد عام"])
         with c2:
             p_name = st.selectbox("المشروع المرتبط", projs['name'].tolist())
-            part_name = st.selectbox("الطرف / المورد / العميل", parties['name'].tolist())
+            part_name = st.selectbox("الطرف / المورد / الموظف المستفيد", parties['name'].tolist())
             method = st.selectbox("طريقة الدفع", ["كاش", "حوالة", "شيك"])
         with c3:
             curr = st.selectbox("العملة", ["USD", "SYP"])
             rate = st.number_input("سعر الصرف", min_value=1.0, value=1.0 if curr == "USD" else 131.0)
             amount_f = st.number_input("المبلغ المالي الإجمالي", min_value=0.0, step=100.0)
-        desc = st.text_area("البيان والملاحظات")
+        desc = st.text_area("البيان والملاحظات (مثال: سلفة نقدية على الراتب / مكافأة / دفعة تصفية حساب)")
 
         if st.button("💾 حفظ وترحيل الفاتورة"):
             if amount_f > 0:
@@ -938,7 +1035,7 @@ elif menu == "➕ إضافة فاتورة وحركة متعددة البنود":
                 cur.execute("INSERT INTO transactions (id, tx_date, tx_type, project_id, stakeholder_id, vault_id, amount, currency, exchange_rate, amount_usd, direction, payment_method, description) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);", (inv_id, t_date, t_type, p_id, s_id, v_id, amount_f, curr, rate, amt_u, dir_m, method, desc))
                 conn.commit()
                 cur.close()
-                st.success("تم ترحيل الفاتورة بنجاح!")
+                st.success(f"تم ترحيل السند {inv_id} وربطه بحساب الطرف المستفيد مباشرة!")
                 st.rerun()
 
 # ====================================================
@@ -988,7 +1085,7 @@ elif menu == "🏢 حسابات المشاريع والمستثمرين":
     st.dataframe(pd.read_sql(q_calc, conn), use_container_width=True)
 
 # ====================================================
-# 16. الإدارة والتشغيل والتعاقدات (لوحة ربط الموظفين بالحسابات الكاملة)
+# 16. الإدارة والتشغيل والتعاقدات (ربط الحسابات)
 # ====================================================
 elif menu == "⚙️ الإدارة والتشغيل والتعاقدات":
     if user_role == "Admin":
@@ -1018,7 +1115,6 @@ elif menu == "⚙️ الإدارة والتشغيل والتعاقدات":
             df_users_full = pd.read_sql(query_users_full, conn)
             st.dataframe(df_users_full, use_container_width=True)
 
-            # جلب قائمة الموظفين المسجلين في النظام
             emps_list_df = pd.read_sql("SELECT id, name FROM stakeholders WHERE role IN ('Employee', 'Partner') ORDER BY name;", conn)
             emp_choices = ["بدون ربط (حساب عام / إداري)"] + [f"{row['name']} (ID: {row['id']})" for _, row in emps_list_df.iterrows()]
 
@@ -1040,7 +1136,6 @@ elif menu == "⚙️ الإدارة والتشغيل والتعاقدات":
                     roles_list = ["Admin", "Manager", "Accountant", "Secretary", "Partner", "Employee"]
                     rl_idx = roles_list.index(u_rl) if u_rl in roles_list else 0
 
-                    # تحديد المؤشر الافتراضي للموظف المرتبط حالياً
                     curr_emp_idx = 0
                     if u_stk_id:
                         for idx, choice in enumerate(emp_choices):
@@ -1052,10 +1147,7 @@ elif menu == "⚙️ الإدارة والتشغيل والتعاقدات":
                         new_u_fn = st.text_input("الاسم الكامل", value=u_fn)
                         new_u_pwd = st.text_input("كلمة المرور", value=u_pwd)
                         new_u_rl = st.selectbox("تعديل الصلاحية", roles_list, index=rl_idx)
-                        
-                        # حقل ربط الموظف
                         selected_emp_link = st.selectbox("الموظف المرتبط بهذا الحساب (لعرض دوامه وراتبه)", emp_choices, index=curr_emp_idx)
-                        
                         new_u_act = st.selectbox("حالة الحساب", ["نشط", "تجميد الحساب"], index=0 if u_act else 1)
 
                         save_user_changes = st.form_submit_button("💾 حفظ تعديلات الحساب فوراً")
@@ -1073,7 +1165,7 @@ elif menu == "⚙️ الإدارة والتشغيل والتعاقدات":
                             """, (new_u_fn.strip(), new_u_pwd.strip(), new_u_rl, is_active_val, new_stk_id, u_id))
                             conn.commit()
                             cur.close()
-                            st.success(f"تم تحديث بيانات الحساب '{sel_user}' وربطه بالموظف بنجاح!")
+                            st.success(f"تم تحديث بيانات الحساب '{sel_user}' وربطه بنجاح!")
                             st.rerun()
 
                     if sel_user not in ["hamza", "mosab"]:
