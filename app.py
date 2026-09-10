@@ -255,6 +255,7 @@ def init_and_login_user(username, password):
         );
         ALTER TABLE app_users ADD COLUMN IF NOT EXISTS stakeholder_id INT;
         ALTER TABLE app_users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+        ALTER TABLE stakeholders ADD COLUMN IF NOT EXISTS salary_type VARCHAR(50) DEFAULT 'monthly_standard';
 
         CREATE TABLE IF NOT EXISTS office_appointments (
             id SERIAL PRIMARY KEY,
@@ -876,11 +877,11 @@ elif menu == "🖨️ طباعة السندات وتصدير التقارير":
         st.download_button("📥 تنزيل سجل الحركات Excel", data=to_excel_download_link(df_all_tx, "transactions.xlsx"), file_name="MA_Transactions.xlsx")
 
 # ====================================================
-# 9. مسيرات الرواتب الشهرية
+# 9. مسيرات الرواتب الشهرية (مع دعم طريقة احتساب الراتب)
 # ====================================================
 elif menu == "💳 مسيرات الرواتب الشهرية":
     st.subheader("💳 احتساب وصرف مسيرات الرواتب وخصم السلف")
-    emps_sal = pd.read_sql("SELECT id, name, salary_amount, salary_currency FROM stakeholders WHERE role IN ('Employee', 'Partner') AND salary_amount > 0;", conn)
+    emps_sal = pd.read_sql("SELECT id, name, salary_amount, salary_currency, salary_type FROM stakeholders WHERE role IN ('Employee', 'Partner') AND salary_amount > 0;", conn)
     if not emps_sal.empty:
         c1, c2 = st.columns(2)
         with c1: selected_emp = st.selectbox("الموظف", emps_sal['name'].tolist())
@@ -889,13 +890,31 @@ elif menu == "💳 مسيرات الرواتب الشهرية":
         emp_id = int(emp_row['id'])
         base_s = float(emp_row['salary_amount'])
         curr_s = str(emp_row['salary_currency'])
+        sal_type = str(emp_row.get('salary_type', 'monthly_standard'))
+
+        # تحديد المعاملات بحسب نوع الراتب (شهري قياسي 30، شهري بدون جمعة 26، أو أسبوعي 24)
+        if sal_type == 'monthly_ex_friday':
+            daily_div = 26.0
+            hourly_div = 208.0
+            type_label = "شهري (بدون أيام الجمعة - 26 يوم عمل)"
+        elif sal_type == 'weekly_6days':
+            daily_div = 24.0
+            hourly_div = 192.0
+            type_label = "أسبوعي (6 أيام عمل - 24 يوم شهرياً)"
+        else:
+            daily_div = 30.0
+            hourly_div = 240.0
+            type_label = "شهري قياسي (30 يوم)"
 
         cur = conn.cursor()
         cur.execute("SELECT COALESCE(SUM(overtime_hours), 0), COUNT(CASE WHEN status = 'غياب' THEN 1 END) FROM employee_attendance WHERE employee_id = %s AND TO_CHAR(work_date, 'YYYY-MM') = %s;", (emp_id, p_month))
         att_d = cur.fetchone()
         ot_h, abs_d = float(att_d[0]), int(att_d[1])
-        ot_val = ot_h * (base_s / 240.0) * 1.5
-        ded_abs_val = abs_d * (base_s / 30.0)
+        
+        hourly_r = base_s / hourly_div if base_s > 0 else 0.0
+        daily_r = base_s / daily_div if base_s > 0 else 0.0
+        ot_val = ot_h * hourly_r * 1.5
+        ded_abs_val = abs_d * daily_r
 
         cur.execute("""
             SELECT COALESCE(SUM(amount), 0)
@@ -908,6 +927,7 @@ elif menu == "💳 مسيرات الرواتب الشهرية":
         total_deductions = ded_abs_val + adv_taken
         net_s = base_s + ot_val - total_deductions
 
+        st.caption(f"📌 نظام احتساب الراتب للموظف: **{type_label}**")
         col1, col2, col3, col4, col5 = st.columns(5)
         with col1: st.metric("الأساسي", f"{base_s:,.2f} {curr_s}")
         with col2: st.metric("إضافي الدوام", f"+{ot_val:,.2f}")
@@ -963,50 +983,54 @@ elif menu == "📦 إدارة المخزون ومواد المشاريع":
                         st.rerun()
 
 # ====================================================
-# 11. دليل الأطراف (الجهات الخارجية)
+# 11. دليل وتعديل الأطراف والرواتب الثابتة وطريقة الاحتساب
 # ====================================================
 elif menu == "👥 دليل وتعديل بيانات الأطراف":
     st.subheader("👥 دليل وتعديل بيانات الأطراف والموظفين")
-    tab_list, tab_add_ext = st.tabs(["📋 قائمة وتعديل الأطراف المسجلة", "➕ إضافة جهة تعامل / طرف خارجي"])
+    tab_list, tab_add_ext = st.tabs(["📋 قائمة وتعديل الأطراف والرواتب الثابتة", "➕ إضافة جهة تعامل / طرف خارجي"])
     
     with tab_list:
-        st.dataframe(pd.read_sql("SELECT id AS \"المعرف\", name AS \"الاسم\", role AS \"الدور\", salary_amount AS \"الراتب الثابت\", salary_currency AS \"العملة\", phone AS \"الهاتف\", notes AS \"البيان\" FROM stakeholders ORDER BY id ASC;", conn), use_container_width=True)
+        st.dataframe(pd.read_sql("SELECT id AS \"المعرف\", name AS \"الاسم\", role AS \"الدور\", salary_amount AS \"الراتب الثابت\", salary_currency AS \"العملة\", salary_type AS \"نوع الاحتساب\", phone AS \"الهاتف\" FROM stakeholders ORDER BY id ASC;", conn), use_container_width=True)
         
         st.markdown("<br><hr>", unsafe_allow_html=True)
-        st.markdown("### ✏️ تعديل الراتب الثابت أو بيانات أي طرف / موظف")
-        st.caption("من هنا يمكنك تحديد أو تعديل الراتب الثابت لأي موظف ليظهر في حسابات الرواتب:")
+        st.markdown("### ✏️ تعديل الراتب الثابت وطريقة الاحتساب لأي موظف")
         
         all_stk = pd.read_sql("SELECT id, name FROM stakeholders ORDER BY name;", conn)
         if not all_stk.empty:
             chosen_stk_name = st.selectbox("اختر الطرف أو الموظف للتعديل:", [""] + all_stk['name'].tolist())
             if chosen_stk_name:
                 cur = conn.cursor()
-                cur.execute("SELECT id, name, role, salary_amount, salary_currency, phone, notes FROM stakeholders WHERE name = %s;", (chosen_stk_name,))
+                cur.execute("SELECT id, name, role, salary_amount, salary_currency, salary_type, phone, notes FROM stakeholders WHERE name = %s;", (chosen_stk_name,))
                 stk_rec = cur.fetchone()
                 cur.close()
                 
-                s_id, s_name, s_role, s_sal, s_curr, s_phone, s_notes = stk_rec
+                s_id, s_name, s_role, s_sal, s_curr, s_type, s_phone, s_notes = stk_rec
                 roles_opts = ["Employee", "General", "Investor", "Partner"]
                 r_idx = roles_opts.index(s_role) if s_role in roles_opts else 0
+
+                types_opts = ["monthly_standard", "monthly_ex_friday", "weekly_6days"]
+                types_labels = ["شهري قياسي (30 يوم)", "شهري بدون جمعة (26 يوم عمل)", "أسبوعي (6 أيام عمل - 24 يوم بالشهر)"]
+                t_idx = types_opts.index(s_type) if s_type in types_opts else 0
 
                 with st.form("edit_stakeholder_salary_form"):
                     ed_name = st.text_input("اسم الطرف", value=s_name)
                     ed_role = st.selectbox("الدور في النظام", roles_opts, index=r_idx)
                     ed_sal = st.number_input("الراتب الشهري الثابت", min_value=0.0, value=float(s_sal or 0.0), step=50.0)
                     ed_curr = st.selectbox("عملة الراتب", ["USD", "SYP"], index=0 if s_curr == "USD" else 1)
+                    ed_type = st.selectbox("طريقة احتساب الراتب", types_opts, index=t_idx, format_func=lambda x: types_labels[types_opts.index(x)])
                     ed_phone = st.text_input("الهاتف", value=s_phone or "")
                     ed_notes = st.text_area("ملاحظات", value=s_notes or "")
 
-                    if st.form_submit_button("💾 حفظ تعديلات الراتب والبيانات"):
+                    if st.form_submit_button("💾 حفظ تعديلات الراتب وطريقة الاحتساب"):
                         cur = conn.cursor()
                         cur.execute("""
                             UPDATE stakeholders 
-                            SET name = %s, role = %s, salary_amount = %s, salary_currency = %s, phone = %s, notes = %s
+                            SET name = %s, role = %s, salary_amount = %s, salary_currency = %s, salary_type = %s, phone = %s, notes = %s
                             WHERE id = %s;
-                        """, (ed_name.strip(), ed_role, ed_sal, ed_curr, ed_phone.strip(), ed_notes.strip(), s_id))
+                        """, (ed_name.strip(), ed_role, ed_sal, ed_curr, ed_type, ed_phone.strip(), ed_notes.strip(), s_id))
                         conn.commit()
                         cur.close()
-                        st.success(f"تم تحديث بيانات '{ed_name}' والراتب الثابت بنجاح!")
+                        st.success(f"تم تحديث بيانات '{ed_name}' وطريقة الاحتساب بنجاح!")
                         st.rerun()
 
     with tab_add_ext:
@@ -1073,7 +1097,7 @@ elif menu == "➕ إضافة فاتورة وحركة متعددة البنود":
                 st.rerun()
 
 # ====================================================
-# 14. تعديل / إلغاء حركة مالية (وربط الحركات القديمة بالأطراف)
+# 14. تعديل / إلغاء حركة مالية
 # ====================================================
 elif menu == "✏️ تعديل / إلغاء حركة مالية":
     if user_role in ["Admin", "Accountant"]:
