@@ -225,13 +225,34 @@ def generate_receipt_pdf(tx_data, items_data):
     buffer.seek(0)
     return buffer.getvalue()
 
-# 3. الهوية البصرية وتصميم القائمة المدمجة الاحترافية داخل الصفحة (تغني عن السايد بار المعلق)
+# 3. الهوية البصرية، إزالة الخطوط السفلية، محاذاة النصوص لليمين، وتوسيط محتوى الجداول
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
-    * { font-family: 'Cairo', sans-serif !important; }
+    * { 
+        font-family: 'Cairo', sans-serif !important; 
+        text-decoration: none !important; 
+    }
     
-    /* إخفاء شريط أدوات ستريم ليت المطور وزر Manage app بالكامل */
+    /* إزالة الخطوط السفلية من الروابط والأسماء والعناوين */
+    a, span, p, h1, h2, h3, h4, h5, h6, label, div {
+        text-decoration: none !important;
+        border-bottom: none !important;
+    }
+
+    /* محاذاة النصوص بكل مكان لتبلش من اليمين */
+    .block-container, div, span, p, label, .stMarkdown, .stText {
+        direction: rtl !important;
+        text-align: right !important;
+    }
+
+    /* توسيط محتوى الجداول بالكامل */
+    table, th, td, [data-testid="stDataFrame"] div, [data-testid="dataframe"] div {
+        text-align: center !important;
+        direction: rtl !important;
+    }
+    
+    /* إخفاء شريط أدوات ستريم ليت وزر Manage app */
     [data-testid="stToolbar"],
     .stAppDeployButton,
     #MainMenu,
@@ -250,19 +271,12 @@ st.markdown("""
         background: transparent !important;
     }
 
-    /* إخفاء السايد بار التقليدي لمنع أي تضارب */
-    section[data-testid="stSidebar"] {
-        display: none !important;
-    }
-
-    [data-testid="stIconMaterial"], .material-symbols-rounded { font-family: 'Material Symbols Rounded' !important; }
-    .block-container { direction: rtl !important; text-align: right !important; padding-top: 1.5rem !important; padding-bottom: 3rem !important; }
     .stApp { background-color: #F9F9F8 !important; }
     
     .metric-card { background: #FFFFFF; border-radius: 12px; padding: 18px 20px; border: 1px solid #E2E1DE; border-right: 6px solid #0F4733; box-shadow: 0 4px 15px rgba(15, 71, 51, 0.05); margin-bottom: 18px; direction: rtl; text-align: right; }
-    .metric-title { color: #A29F98; font-size: 0.95rem; font-weight: 700; margin-bottom: 6px; }
-    .metric-value-usd { color: #0F4733; font-size: 2rem; font-weight: 900; }
-    .metric-value-gold { color: #BE9D5F; font-size: 2rem; font-weight: 900; }
+    .metric-title { color: #A29F98; font-size: 0.95rem; font-weight: 700; margin-bottom: 6px; text-align: right; }
+    .metric-value-usd { color: #0F4733; font-size: 2rem; font-weight: 900; text-align: right; }
+    .metric-value-gold { color: #BE9D5F; font-size: 2rem; font-weight: 900; text-align: right; }
     
     input, textarea, select, div[data-baseweb="select"] > div { background-color: #FFFFFF !important; color: #44494B !important; border: 1.5px solid #A29F98 !important; border-radius: 8px !important; font-weight: 600 !important; direction: rtl !important; text-align: right !important; }
     .stButton > button, .stDownloadButton > button { background-color: #0F4733 !important; color: #FFFFFF !important; border: 1.5px solid #BE9D5F !important; border-radius: 8px !important; padding: 8px 24px !important; font-weight: 800 !important; box-shadow: 0 4px 12px rgba(15, 71, 51, 0.15); }
@@ -332,7 +346,7 @@ if not st.session_state.authenticated:
     st.stop()
 
 # ----------------------------------------------------
-# الصلاحيات وتوزيع الشاشات والقائمة الرئيسية المدمجة
+# الصلاحيات وتوزيع الشاشات
 # ----------------------------------------------------
 current_user = st.session_state.user_info
 user_role = current_user['role']
@@ -410,7 +424,7 @@ ROLE_NAME_AR = {
     "Employee": "موظف"
 }
 
-# شريط التنقل العلوي البارز (بديل السايد بار لضمان ظهوره بشكل قاطع وسلس)
+# شريط التنقل العلوي البارز
 st.markdown("""
     <div style="background-color: #0F4733; padding: 12px 20px; border-radius: 10px; border: 1.5px solid #BE9D5F; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; color: white; direction: rtl;">
         <div><b>شركة MA للتطوير العقاري</b> | المستخدم: <u>{}</u> ({})</div>
@@ -1472,7 +1486,7 @@ elif menu == "⚙️ الإدارة والتشغيل والتعاقدات":
                     p_type_ar = st.selectbox("نوع المشروع", list(proj_type_map.keys()))
                     p_fee_n = st.number_input("أتعاب الإدارة %", min_value=0.0, value=15.0)
                     if st.form_submit_button("فتح المشروع"):
-                        if p_name_n.name.strip():
+                        if p_name_n.strip():
                             cur = conn.cursor()
                             cur.execute("INSERT INTO projects (name, project_type, management_fee_rate, status) VALUES (%s, %s, %s, 'Active') ON CONFLICT (name) DO NOTHING;", (p_name_n.strip(), proj_type_map[p_type_ar], p_fee_n / 100.0))
                             conn.commit()
