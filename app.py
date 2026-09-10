@@ -190,7 +190,7 @@ def generate_investor_statement_pdf(investor_name, proj_name, stats, tx_rows):
     buffer.seek(0)
     return buffer.getvalue()
 
-# 3. الهوية البصرية وضبط المسافات الرأسية لمنع تداخل شريط الأدوات
+# 3. الهوية البصرية وضبط المسافات الرأسية
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
@@ -206,7 +206,6 @@ st.markdown("""
         font-family: 'Material Symbols Rounded' !important;
     }
 
-    /* مسافة أمان علوية كافية لمنع الاختفاء خلف شريط المتصفح والأدوات */
     .block-container {
         direction: rtl !important;
         text-align: right !important;
@@ -1355,72 +1354,125 @@ elif menu == "📦 إدارة المخزون ومواد المشاريع":
         st.dataframe(df_issues, use_container_width=True)
 
 # ====================================================
-# 9. دليل وتعديل بيانات الأطراف
+# 9. دليل وتعديل بيانات الأطراف (تمت إضافة تبويب إضافة طرف خارجي)
 # ====================================================
 elif menu == "👥 دليل وتعديل بيانات الأطراف":
-    st.subheader("👥 دليل كافة الأطراف والجهات وتعديل بياناتهم")
+    st.subheader("👥 دليل كافة الأطراف والجهات والتعاملات الخارجية")
     
-    query_all_parties = """
-        SELECT 
-            s.id AS "المعرف",
-            s.name AS "الاسم / الطرف",
-            s.role AS "الدور",
-            s.status AS "الحالة",
-            s.salary_amount AS "الراتب",
-            s.salary_currency AS "عملة الراتب",
-            s.partner_equity_pct AS "نسبة الشراكة %",
-            s.phone AS "رقم الهاتف",
-            COUNT(t.id) AS "إجمالي الحركات",
-            COALESCE(SUM(t.amount_usd), 0) AS "إجمالي المبالغ ($)"
-        FROM stakeholders s
-        LEFT JOIN transactions t ON s.id = t.stakeholder_id
-        GROUP BY s.id, s.name, s.role, s.status, s.salary_amount, s.salary_currency, s.partner_equity_pct, s.phone
-        ORDER BY s.id ASC;
-    """
-    df_parties = pd.read_sql(query_all_parties, conn)
-    st.dataframe(df_parties, use_container_width=True)
+    tab_list_edit, tab_add_party = st.tabs([
+        "📋 قائمة وتعديل الأطراف المسجلة",
+        "➕ إضافة مورد / جهة / شخص خارجي"
+    ])
 
-    st.markdown("<br><hr>", unsafe_allow_html=True)
-    st.markdown("### ✏️ تعديل بيانات طرف مسجل")
-    party_names = df_parties["الاسم / الطرف"].tolist()
-    selected_party_name = st.selectbox("اختر الطرف المطلوب تعديله:", [""] + party_names)
+    with tab_list_edit:
+        query_all_parties = """
+            SELECT 
+                s.id AS "المعرف",
+                s.name AS "الاسم / الطرف",
+                s.role AS "الدور / الصفة",
+                s.status AS "الحالة",
+                s.salary_amount AS "الراتب",
+                s.salary_currency AS "عملة الراتب",
+                s.partner_equity_pct AS "نسبة الشراكة %",
+                s.phone AS "رقم الهاتف",
+                s.notes AS "تفاصيل / تخصص الطرف",
+                COUNT(t.id) AS "إجمالي الحركات",
+                COALESCE(SUM(t.amount_usd), 0) AS "إجمالي المبالغ ($)"
+            FROM stakeholders s
+            LEFT JOIN transactions t ON s.id = t.stakeholder_id
+            GROUP BY s.id, s.name, s.role, s.status, s.salary_amount, s.salary_currency, s.partner_equity_pct, s.phone, s.notes
+            ORDER BY s.id ASC;
+        """
+        df_parties = pd.read_sql(query_all_parties, conn)
+        st.dataframe(df_parties, use_container_width=True)
 
-    if selected_party_name:
-        cur = conn.cursor()
-        cur.execute("SELECT id, name, role, status, salary_amount, salary_currency, partner_equity_pct, phone, notes FROM stakeholders WHERE name = %s;", (selected_party_name,))
-        p_data = cur.fetchone()
-        cur.close()
+        st.markdown("<br><hr>", unsafe_allow_html=True)
+        st.markdown("### ✏️ تعديل بيانات طرف مسجل")
+        party_names = df_parties["الاسم / الطرف"].tolist()
+        selected_party_name = st.selectbox("اختر الطرف المطلوب تعديله:", [""] + party_names)
 
-        if p_data:
-            p_id, cur_name, cur_role, cur_status, cur_sal, cur_sal_curr, cur_equity, cur_phone, cur_notes = p_data
-            role_options = ["General", "Employee", "Investor", "Partner"]
-            status_options = ["نشط", "مفصول", "مستقيل", "عقد منتهي", "شريك سابق"]
+        if selected_party_name:
+            cur = conn.cursor()
+            cur.execute("SELECT id, name, role, status, salary_amount, salary_currency, partner_equity_pct, phone, notes FROM stakeholders WHERE name = %s;", (selected_party_name,))
+            p_data = cur.fetchone()
+            cur.close()
 
-            with st.form("edit_party_form"):
-                cp1, cp2, cp3 = st.columns(3)
-                with cp1:
-                    new_name = st.text_input("اسم الطرف", value=cur_name if cur_name else "")
-                    new_role = st.selectbox("الدور", role_options, index=role_options.index(cur_role) if cur_role in role_options else 0)
-                    new_status = st.selectbox("الحالة", status_options, index=status_options.index(cur_status) if cur_status in status_options else 0)
-                with cp2:
-                    new_sal = st.number_input("الراتب", min_value=0.0, value=float(cur_sal) if cur_sal else 0.0, step=50.0)
-                    new_sal_curr = st.selectbox("عملة الراتب", ["USD", "SYP"], index=0 if cur_sal_curr == "USD" else 1)
-                    new_phone = st.text_input("الهاتف", value=cur_phone if cur_phone else "")
-                with cp3:
-                    new_equity = st.number_input("نسبة الشراكة %", min_value=0.0, max_value=100.0, value=float(cur_equity) if cur_equity else 0.0, step=1.0)
-                    new_notes = st.text_area("ملاحظات", value=cur_notes if cur_notes else "")
+            if p_data:
+                p_id, cur_name, cur_role, cur_status, cur_sal, cur_sal_curr, cur_equity, cur_phone, cur_notes = p_data
+                role_options = ["General", "Employee", "Investor", "Partner"]
+                status_options = ["نشط", "مفصول", "مستقيل", "عقد منتهي", "غير نشط"]
 
-                if st.form_submit_button("💾 حفظ التعديلات فوراً"):
+                with st.form("edit_party_form"):
+                    cp1, cp2, cp3 = st.columns(3)
+                    with cp1:
+                        new_name = st.text_input("اسم الطرف", value=cur_name if cur_name else "")
+                        new_role = st.selectbox("الدور في النظام", role_options, index=role_options.index(cur_role) if cur_role in role_options else 0)
+                        new_status = st.selectbox("الحالة", status_options, index=status_options.index(cur_status) if cur_status in status_options else 0)
+                    with cp2:
+                        new_sal = st.number_input("الراتب (للموظفين فقط)", min_value=0.0, value=float(cur_sal) if cur_sal else 0.0, step=50.0)
+                        new_sal_curr = st.selectbox("عملة الراتب", ["USD", "SYP"], index=0 if cur_sal_curr == "USD" else 1)
+                        new_phone = st.text_input("الهاتف", value=cur_phone if cur_phone else "")
+                    with cp3:
+                        new_equity = st.number_input("نسبة الشراكة % (للشركاء فقط)", min_value=0.0, max_value=100.0, value=float(cur_equity) if cur_equity else 0.0, step=1.0)
+                        new_notes = st.text_area("تفاصيل وتخصص الطرف", value=cur_notes if cur_notes else "")
+
+                    if st.form_submit_button("💾 حفظ التعديلات فوراً"):
+                        cur = conn.cursor()
+                        cur.execute("""
+                            UPDATE stakeholders 
+                            SET name = %s, role = %s, status = %s, salary_amount = %s, salary_currency = %s, partner_equity_pct = %s, phone = %s, notes = %s
+                            WHERE id = %s;
+                        """, (new_name.strip(), new_role, new_status, new_sal, new_sal_curr, new_equity, new_phone.strip(), new_notes.strip(), p_id))
+                        conn.commit()
+                        cur.close()
+                        st.success("تم تحديث البيانات بنجاح!")
+                        st.rerun()
+
+    with tab_add_party:
+        st.markdown("### ➕ إضافة طرف / جهة خارجية للتعامل (سائق، معمل، محامي، مورد، مهندس...)")
+        st.caption("هذا الطرف ليس موظفاً براتب شهري ولا شريكاً، وسيظهر اسمه في الفواتير وسندات الصرف والمشتريات فوراً:")
+        
+        with st.form("add_external_party_form", clear_on_submit=True):
+            cap1, cap2 = st.columns(2)
+            with cap1:
+                ext_name = st.text_input("اسم الشخص أو المعمل أو الجهة (مثال: مكتب المحامي فلان / معمل رخام النور / السائق أحمد)")
+                ext_category = st.selectbox("نوع وطبيعة التعامل", [
+                    "مورد مواد ومعدات",
+                    "معمل / منشأة تصنيع",
+                    "سائق / نقليات وشحن",
+                    "خدمات قانونية / محامي",
+                    "استشارات وتصاميم هندسية",
+                    "مقاول بالباطن / ورشة تنفيذ",
+                    "جهة حكومية / تراخيص ورسوم",
+                    "أخرى"
+                ])
+            with cap2:
+                ext_phone = st.text_input("رقم الهاتف / التواصل")
+                ext_notes = st.text_area("ملاحظات إضافية (العنوان، نوعية البضاعة، طريقة الحساب المتفق عليها...)")
+
+            if st.form_submit_button("🚀 تسجيل الطرف الخارجي واعتماده في النظام"):
+                if not ext_name.strip():
+                    st.error("يرجى إدخال اسم الطرف أو الجهة.")
+                else:
                     cur = conn.cursor()
-                    cur.execute("""
-                        UPDATE stakeholders 
-                        SET name = %s, role = %s, status = %s, salary_amount = %s, salary_currency = %s, partner_equity_pct = %s, phone = %s, notes = %s
-                        WHERE id = %s;
-                    """, (new_name.strip(), new_role, new_status, new_sal, new_sal_curr, new_equity, new_phone.strip(), new_notes.strip(), p_id))
-                    conn.commit()
-                    cur.close()
-                    st.success("تم تحديث البيانات بنجاح!")
-                    st.rerun()
+                    try:
+                        notes_combined = f"[{ext_category}] {ext_notes.strip()}"
+                        cur.execute("""
+                            INSERT INTO stakeholders (name, role, phone, salary_amount, salary_currency, partner_equity_pct, status, notes)
+                            VALUES (%s, 'General', %s, 0.0, 'USD', 0.0, 'نشط', %s)
+                            ON CONFLICT (name) DO UPDATE SET 
+                                phone = EXCLUDED.phone,
+                                notes = EXCLUDED.notes,
+                                status = 'نشط';
+                        """, (ext_name.strip(), ext_phone.strip(), notes_combined))
+                        conn.commit()
+                        st.success(f"تم تسجيل '{ext_name}' بنجاح كجهة تعامل خارجية، وأصبح متاحاً في الفواتير وسندات الصرف فوراً!")
+                        st.rerun()
+                    except Exception as e:
+                        conn.rollback()
+                        st.error(f"خطأ أثناء الحفظ: {e}")
+                    finally:
+                        cur.close()
 
 # ====================================================
 # 10. دفتر الحركات وسجل الفواتير
