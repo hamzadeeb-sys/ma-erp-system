@@ -226,7 +226,7 @@ def generate_receipt_pdf(tx_data, items_data):
     buffer.seek(0)
     return buffer.getvalue()
 
-# 3. الهوية البصرية وتثبيت زر فتح السايد بار في منتصف يسار الشاشة
+# 3. الهوية البصرية وجعل زر السايد بار فوق كل عناصر الصفحة (أعلى طبقة أمنية)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
@@ -251,7 +251,7 @@ st.markdown("""
         background: transparent !important;
     }
 
-    /* زر إظهار السايد بار: مثبت في منتصف الطرف الأيسر تماماً */
+    /* زر إظهار السايد بار: الطبقة العليا المطلقة (فوق كل شيء) */
     [data-testid="collapsedControl"] {
         display: flex !important;
         visibility: visible !important;
@@ -261,7 +261,7 @@ st.markdown("""
         left: 0 !important;
         right: auto !important;
         transform: translateY(-50%) !important;
-        z-index: 999999 !important;
+        z-index: 99999999 !important;
         margin: 0 !important;
         padding: 0 !important;
     }
@@ -278,9 +278,10 @@ st.markdown("""
         align-items: center !important;
         justify-content: center !important;
         cursor: pointer !important;
-        box-shadow: 4px 0 18px rgba(15, 71, 51, 0.45) !important;
+        box-shadow: 6px 0 25px rgba(15, 71, 51, 0.6) !important;
         padding: 4px !important;
         transition: all 0.2s ease !important;
+        z-index: 99999999 !important;
     }
 
     [data-testid="collapsedControl"] button:hover {
@@ -301,11 +302,27 @@ st.markdown("""
         stroke: #0F4733 !important;
     }
 
+    [data-testid="collapsedControl"] button::after {
+        content: "القائمة الرئيسية";
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
+        color: #FFFFFF;
+        font-weight: 800;
+        font-size: 13px;
+        letter-spacing: 4px;
+    }
+
+    [data-testid="collapsedControl"] button:hover::after {
+        color: #0F4733;
+        font-weight: 900;
+    }
+
     /* زر إغلاق السايد بار من الداخل */
     button[data-testid="stSidebarCollapseButton"] {
         background-color: rgba(190, 157, 95, 0.2) !important;
         border: 1px solid #BE9D5F !important;
         border-radius: 6px !important;
+        z-index: 99999999 !important;
     }
     button[data-testid="stSidebarCollapseButton"] svg {
         fill: #FFFFFF !important;
@@ -315,12 +332,12 @@ st.markdown("""
     .block-container { direction: rtl !important; text-align: right !important; padding-top: 2rem !important; padding-bottom: 3rem !important; }
     .stApp { background-color: #F9F9F8 !important; }
     
-    /* ضبط السايد بار بالكامل */
     section[data-testid="stSidebar"] { 
         background-color: #0F4733 !important; 
         border: none !important; 
         direction: rtl !important; 
         text-align: right !important; 
+        z-index: 9999999 !important;
     }
     section[data-testid="stSidebar"][aria-expanded="true"] { 
         border-left: 2px solid #BE9D5F !important; 
