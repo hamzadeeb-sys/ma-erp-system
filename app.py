@@ -18,8 +18,7 @@ logo_filename = "MA Logo.png" if os.path.exists("MA Logo.png") else ("Mosab/MA L
 st.set_page_config(
     page_title="شركة MA العقارية | منظومة الإدارة والرقابة المالية",
     page_icon=logo_filename if logo_filename else "🏛️",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
 # 2. بيانات الاتصال بقاعدة البيانات السحابية Supabase
@@ -226,7 +225,7 @@ def generate_receipt_pdf(tx_data, items_data):
     buffer.seek(0)
     return buffer.getvalue()
 
-# 3. الهوية البصرية وجعل زر السايد بار فوق كل عناصر الصفحة (أعلى طبقة أمنية)
+# 3. الهوية البصرية وتصميم القائمة المدمجة الاحترافية داخل الصفحة (تغني عن السايد بار المعلق)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
@@ -251,100 +250,14 @@ st.markdown("""
         background: transparent !important;
     }
 
-    /* زر إظهار السايد بار: الطبقة العليا المطلقة (فوق كل شيء) */
-    [data-testid="collapsedControl"] {
-        display: flex !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        position: fixed !important;
-        top: 50% !important;
-        left: 0 !important;
-        right: auto !important;
-        transform: translateY(-50%) !important;
-        z-index: 99999999 !important;
-        margin: 0 !important;
-        padding: 0 !important;
+    /* إخفاء السايد بار التقليدي لمنع أي تضارب */
+    section[data-testid="stSidebar"] {
+        display: none !important;
     }
 
-    [data-testid="collapsedControl"] button {
-        height: 120px !important;
-        width: 38px !important;
-        border-radius: 0 12px 12px 0 !important;
-        background-color: #0F4733 !important;
-        border: 2px solid #BE9D5F !important;
-        border-left: none !important;
-        display: flex !important;
-        flex-direction: column !important;
-        align-items: center !important;
-        justify-content: center !important;
-        cursor: pointer !important;
-        box-shadow: 6px 0 25px rgba(15, 71, 51, 0.6) !important;
-        padding: 4px !important;
-        transition: all 0.2s ease !important;
-        z-index: 99999999 !important;
-    }
-
-    [data-testid="collapsedControl"] button:hover {
-        background-color: #BE9D5F !important;
-        border-color: #0F4733 !important;
-        width: 44px !important;
-    }
-
-    [data-testid="collapsedControl"] button svg {
-        fill: #FFFFFF !important;
-        stroke: #FFFFFF !important;
-        width: 24px !important;
-        height: 24px !important;
-    }
-
-    [data-testid="collapsedControl"] button:hover svg {
-        fill: #0F4733 !important;
-        stroke: #0F4733 !important;
-    }
-
-    [data-testid="collapsedControl"] button::after {
-        content: "القائمة الرئيسية";
-        writing-mode: vertical-rl;
-        text-orientation: mixed;
-        color: #FFFFFF;
-        font-weight: 800;
-        font-size: 13px;
-        letter-spacing: 4px;
-    }
-
-    [data-testid="collapsedControl"] button:hover::after {
-        color: #0F4733;
-        font-weight: 900;
-    }
-
-    /* زر إغلاق السايد بار من الداخل */
-    button[data-testid="stSidebarCollapseButton"] {
-        background-color: rgba(190, 157, 95, 0.2) !important;
-        border: 1px solid #BE9D5F !important;
-        border-radius: 6px !important;
-        z-index: 99999999 !important;
-    }
-    button[data-testid="stSidebarCollapseButton"] svg {
-        fill: #FFFFFF !important;
-    }
-
-    [data-testid="stIconMaterial"], .material-symbols-rounded, button[data-testid="stSidebarCollapseButton"] *, button[data-testid="collapsedControl"] * { font-family: 'Material Symbols Rounded' !important; }
-    .block-container { direction: rtl !important; text-align: right !important; padding-top: 2rem !important; padding-bottom: 3rem !important; }
+    [data-testid="stIconMaterial"], .material-symbols-rounded { font-family: 'Material Symbols Rounded' !important; }
+    .block-container { direction: rtl !important; text-align: right !important; padding-top: 1.5rem !important; padding-bottom: 3rem !important; }
     .stApp { background-color: #F9F9F8 !important; }
-    
-    section[data-testid="stSidebar"] { 
-        background-color: #0F4733 !important; 
-        border: none !important; 
-        direction: rtl !important; 
-        text-align: right !important; 
-        z-index: 9999999 !important;
-    }
-    section[data-testid="stSidebar"][aria-expanded="true"] { 
-        border-left: 2px solid #BE9D5F !important; 
-    }
-    section[data-testid="stSidebar"] * { 
-        color: #FFFFFF !important; 
-    }
     
     .metric-card { background: #FFFFFF; border-radius: 12px; padding: 18px 20px; border: 1px solid #E2E1DE; border-right: 6px solid #0F4733; box-shadow: 0 4px 15px rgba(15, 71, 51, 0.05); margin-bottom: 18px; direction: rtl; text-align: right; }
     .metric-title { color: #A29F98; font-size: 0.95rem; font-weight: 700; margin-bottom: 6px; }
@@ -419,7 +332,7 @@ if not st.session_state.authenticated:
     st.stop()
 
 # ----------------------------------------------------
-# الصلاحيات وتوزيع الشاشات
+# الصلاحيات وتوزيع الشاشات والقائمة الرئيسية المدمجة
 # ----------------------------------------------------
 current_user = st.session_state.user_info
 user_role = current_user['role']
@@ -497,44 +410,24 @@ ROLE_NAME_AR = {
     "Employee": "موظف"
 }
 
-with st.sidebar:
-    if logo_b64:
-        st.markdown(f'<div style="text-align: center; margin-bottom: 8px;"><img src="data:image/png;base64,{logo_b64}" style="width: 110px;"></div>', unsafe_allow_html=True)
-    st.markdown("""
-        <div style="text-align: center; color: #BE9D5F; font-size: 1.25rem; font-weight: 800; letter-spacing: 1px;">شركة MA العقارية</div>
-        <div style="text-align: center; color: #A29F98; font-size: 0.8rem; margin-bottom: 12px;">للتطوير العقاري والإكساء والتعهدات</div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown(f"""
-        <div style="padding: 8px; background: rgba(190, 157, 95, 0.15); border-radius: 8px; text-align: center; margin-bottom: 15px;">
-            <div style="font-size: 0.8rem; color: #BE9D5F;">المستخدم الحالي:</div>
-            <div style="font-weight: 800; font-size: 1rem; color: #FFFFFF;">{current_user['full_name']}</div>
-            <div style="font-size: 0.75rem; color: #E2E1DE;">الصلاحية: {ROLE_NAME_AR.get(user_role, user_role)}</div>
-        </div>
-        <div style="height: 1px; background: #BE9D5F; margin-bottom: 12px;"></div>
-    """, unsafe_allow_html=True)
-    
-    menu = st.sidebar.radio("القائمة الرئيسية", allowed_menus)
+# شريط التنقل العلوي البارز (بديل السايد بار لضمان ظهوره بشكل قاطع وسلس)
+st.markdown("""
+    <div style="background-color: #0F4733; padding: 12px 20px; border-radius: 10px; border: 1.5px solid #BE9D5F; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; color: white; direction: rtl;">
+        <div><b>شركة MA للتطوير العقاري</b> | المستخدم: <u>{}</u> ({})</div>
+    </div>
+""".format(current_user['full_name'], ROLE_NAME_AR.get(user_role, user_role)), unsafe_allow_html=True)
 
-    st.markdown("<br><hr style='border-color: rgba(190, 157, 95, 0.3);'>", unsafe_allow_html=True)
-    if st.sidebar.button("🚪 تسجيل الخروج"):
+col_nav1, col_nav2 = st.columns([4, 1])
+with col_nav1:
+    menu = st.selectbox("📂 انتقل إلى القسم المطلوب:", allowed_menus)
+with col_nav2:
+    st.markdown("<div style='padding-top: 28px;'></div>", unsafe_allow_html=True)
+    if st.button("🚪 تسجيل الخروج"):
         st.session_state.authenticated = False
         st.session_state.user_info = None
         st.rerun()
 
-col_title, col_logo = st.columns([5, 1])
-with col_title:
-    st.markdown("""
-        <div style="direction: rtl; text-align: right; padding-top: 5px;">
-            <h2 style="margin: 0; padding: 0; font-size: 1.7rem; color: #0F4733; font-weight: 800;">منظومة الإدارة والرقابة المالية</h2>
-            <div style="color: #BE9D5F; font-size: 0.95rem; font-weight: 700; margin-top: 3px;">شركة MA للتطوير العقاري والمقاولات</div>
-        </div>
-    """, unsafe_allow_html=True)
-with col_logo:
-    if logo_b64:
-        st.markdown(f'<div style="text-align: left; padding-top: 5px;"><img src="data:image/png;base64,{logo_b64}" style="height: 48px;"></div>', unsafe_allow_html=True)
-
-st.markdown("<hr style='border: 1px solid #BE9D5F; margin-top: 12px; margin-bottom: 25px;'>", unsafe_allow_html=True)
+st.markdown("<hr style='border: 1px solid #BE9D5F; margin-top: 10px; margin-bottom: 25px;'>", unsafe_allow_html=True)
 
 conn = get_connection()
 
@@ -1579,7 +1472,7 @@ elif menu == "⚙️ الإدارة والتشغيل والتعاقدات":
                     p_type_ar = st.selectbox("نوع المشروع", list(proj_type_map.keys()))
                     p_fee_n = st.number_input("أتعاب الإدارة %", min_value=0.0, value=15.0)
                     if st.form_submit_button("فتح المشروع"):
-                        if p_name_n.strip():
+                        if p_name_n.name.strip():
                             cur = conn.cursor()
                             cur.execute("INSERT INTO projects (name, project_type, management_fee_rate, status) VALUES (%s, %s, %s, 'Active') ON CONFLICT (name) DO NOTHING;", (p_name_n.strip(), proj_type_map[p_type_ar], p_fee_n / 100.0))
                             conn.commit()
