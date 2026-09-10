@@ -199,58 +199,51 @@ def generate_receipt_pdf(tx_data, items_data):
     buffer.seek(0)
     return buffer.getvalue()
 
-# 3. الهوية البصرية وإخفاء الشريط العلوي بالكامل
+# 3. الهوية البصرية وضبط أزرار التحكم بالسايد بار وإخفاء أدوات المطور
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
     * { font-family: 'Cairo', sans-serif !important; }
     
-    /* 1. إخفاء الشريط الملون العلوي تماماً */
-    div[data-testid="stDecoration"] {
-        display: none !important;
-        height: 0 !important;
-    }
-
-    /* 2. جعل الهيدر بدون ارتفاع ومكانه غير محجوز */
-    header[data-testid="stHeader"] {
-        background: transparent !important;
-        height: 0px !important;
-    }
-
-    /* 3. إخفاء شريط الأدوات وأزرار المشاركة والتعديل وجيت هاب والقائمة الثلاثية */
-    header[data-testid="stHeader"] > div:last-child,
+    /* 1. إخفاء شريط أدوات Streamlit المطور (المشاركة، جيت هاب، التعديل) */
     [data-testid="stToolbar"],
-    [class*="stToolbar"],
+    .stAppDeployButton,
     #MainMenu,
     footer,
-    .stAppDeployButton,
-    a[href*="github.com"],
-    button[title*="GitHub"],
-    button[title*="Share"],
-    button[title*="Edit"],
-    button[title="Manage app"],
+    div[data-testid="stDecoration"],
     [data-testid="manage-app-button"] {
         display: none !important;
         visibility: hidden !important;
-        opacity: 0 !important;
-        pointer-events: none !important;
-        width: 0 !important;
-        height: 0 !important;
     }
 
-    /* 4. الحفاظ على زر إظهار السايد بار فقط ليعمل دون مشاكل */
-    header[data-testid="stHeader"] [data-testid="collapsedControl"],
-    header[data-testid="stHeader"] button[data-testid="stSidebarCollapseButton"] {
+    /* 2. إبقاء الهيدر شفافاً وعدم حجب مساحة زر فتح السايد بار */
+    header[data-testid="stHeader"] {
+        background: transparent !important;
+        z-index: 99 !important;
+    }
+
+    /* 3. ضمان ظهور زر إظهار السايد بار وسهم الفتح دائماً وبتنسيق واضح */
+    [data-testid="collapsedControl"],
+    button[data-testid="stSidebarCollapseButton"],
+    header[data-testid="stHeader"] [data-testid="collapsedControl"] {
         display: flex !important;
         visibility: visible !important;
         opacity: 1 !important;
-        pointer-events: auto !important;
-        width: auto !important;
-        height: auto !important;
+        z-index: 999999 !important;
+        background-color: #0F4733 !important;
+        color: #FFFFFF !important;
+        border-radius: 8px !important;
+        border: 1.5px solid #BE9D5F !important;
+    }
+
+    [data-testid="collapsedControl"] svg,
+    button[data-testid="stSidebarCollapseButton"] svg {
+        fill: #FFFFFF !important;
+        color: #FFFFFF !important;
     }
 
     [data-testid="stIconMaterial"], .material-symbols-rounded, button[data-testid="stSidebarCollapseButton"] *, button[data-testid="collapsedControl"] * { font-family: 'Material Symbols Rounded' !important; }
-    .block-container { direction: rtl !important; text-align: right !important; padding-top: 3rem !important; padding-bottom: 3rem !important; }
+    .block-container { direction: rtl !important; text-align: right !important; padding-top: 3.5rem !important; padding-bottom: 3rem !important; }
     .stApp { background-color: #F9F9F8 !important; }
     
     section[data-testid="stSidebar"] { background-color: #0F4733 !important; border: none !important; direction: rtl !important; text-align: right !important; }
