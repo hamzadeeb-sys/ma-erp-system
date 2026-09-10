@@ -225,7 +225,7 @@ def generate_receipt_pdf(tx_data, items_data):
     buffer.seek(0)
     return buffer.getvalue()
 
-# 3. الهوية البصرية وإعداد الجداول بشكل طبيعي وواضح جداً
+# 3. الهوية البصرية وتوسيط كافة العناصر (النصوص، العناوين، الجداول، والبطاقات)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
@@ -239,14 +239,23 @@ st.markdown("""
         border-bottom: none !important;
     }
 
-    .block-container, div, span, p, label, .stMarkdown, .stText {
+    /* توسيط كافة النصوص والعناوين في المنتصف تماماً */
+    .block-container, div, span, p, label, .stMarkdown, .stText, h1, h2, h3, h4 {
         direction: rtl !important;
-        text-align: right !important;
+        text-align: center !important;
     }
 
-    /* ضمان وضوح وعرض كافة خلايا الجداول والتواريخ والأرقام */
+    /* توسيط محتوى الجداول والخلايا بالكامل */
     [data-testid="stDataFrame"] {
-        direction: rtl !important;
+        text-align: center !important;
+        margin: auto !important;
+    }
+    [data-testid="stDataFrame"] table {
+        text-align: center !important;
+        margin: auto !important;
+    }
+    [data-testid="stDataFrame"] th, [data-testid="stDataFrame"] td {
+        text-align: center !important;
     }
     
     [data-testid="stToolbar"],
@@ -269,13 +278,13 @@ st.markdown("""
 
     .stApp { background-color: #F9F9F8 !important; }
     
-    .metric-card { background: #FFFFFF; border-radius: 12px; padding: 18px 20px; border: 1px solid #E2E1DE; border-right: 6px solid #0F4733; box-shadow: 0 4px 15px rgba(15, 71, 51, 0.05); margin-bottom: 18px; direction: rtl; text-align: right; }
-    .metric-title { color: #A29F98; font-size: 0.95rem; font-weight: 700; margin-bottom: 6px; text-align: right; }
-    .metric-value-usd { color: #0F4733; font-size: 2rem; font-weight: 900; text-align: right; }
-    .metric-value-gold { color: #BE9D5F; font-size: 2rem; font-weight: 900; text-align: right; }
+    .metric-card { background: #FFFFFF; border-radius: 12px; padding: 18px 20px; border: 1px solid #E2E1DE; border-top: 6px solid #0F4733; box-shadow: 0 4px 15px rgba(15, 71, 51, 0.05); margin-bottom: 18px; direction: rtl; text-align: center !important; }
+    .metric-title { color: #A29F98; font-size: 0.95rem; font-weight: 700; margin-bottom: 6px; text-align: center !important; }
+    .metric-value-usd { color: #0F4733; font-size: 2rem; font-weight: 900; text-align: center !important; }
+    .metric-value-gold { color: #BE9D5F; font-size: 2rem; font-weight: 900; text-align: center !important; }
     
-    input, textarea, select, div[data-baseweb="select"] > div { background-color: #FFFFFF !important; color: #44494B !important; border: 1.5px solid #A29F98 !important; border-radius: 8px !important; font-weight: 600 !important; direction: rtl !important; text-align: right !important; }
-    .stButton > button, .stDownloadButton > button { background-color: #0F4733 !important; color: #FFFFFF !important; border: 1.5px solid #BE9D5F !important; border-radius: 8px !important; padding: 8px 24px !important; font-weight: 800 !important; box-shadow: 0 4px 12px rgba(15, 71, 51, 0.15); }
+    input, textarea, select, div[data-baseweb="select"] > div { background-color: #FFFFFF !important; color: #44494B !important; border: 1.5px solid #A29F98 !important; border-radius: 8px !important; font-weight: 600 !important; direction: rtl !important; text-align: center !important; }
+    .stButton > button, .stDownloadButton > button { background-color: #0F4733 !important; color: #FFFFFF !important; border: 1.5px solid #BE9D5F !important; border-radius: 8px !important; padding: 8px 24px !important; font-weight: 800 !important; box-shadow: 0 4px 12px rgba(15, 71, 51, 0.15); display: block; margin: 0 auto; }
     .stButton > button:hover, .stDownloadButton > button:hover { background-color: #BE9D5F !important; color: #0F4733 !important; border-color: #0F4733 !important; }
     </style>
 """, unsafe_allow_html=True)
@@ -420,24 +429,22 @@ ROLE_NAME_AR = {
     "Employee": "موظف"
 }
 
-# شريط التنقل العلوي البارز
+# شريط التنقل العلوي المتوسط
 st.markdown("""
-    <div style="background-color: #0F4733; padding: 12px 20px; border-radius: 10px; border: 1.5px solid #BE9D5F; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; color: white; direction: rtl;">
-        <div><b>شركة MA للتطوير العقاري</b> | المستخدم: <u>{}</u> ({})</div>
+    <div style="background-color: #0F4733; padding: 12px 20px; border-radius: 10px; border: 1.5px solid #BE9D5F; text-align: center; margin-bottom: 20px; color: white;">
+        <b>شركة MA للتطوير العقاري</b> | المستخدم: <u>{}</u> ({})
     </div>
 """.format(current_user['full_name'], ROLE_NAME_AR.get(user_role, user_role)), unsafe_allow_html=True)
 
-col_nav1, col_nav2 = st.columns([4, 1])
-with col_nav1:
-    menu = st.selectbox("📂 انتقل إلى القسم المطلوب:", allowed_menus)
+col_nav1, col_nav2, col_nav3 = st.columns([1, 3, 1])
 with col_nav2:
-    st.markdown("<div style='padding-top: 28px;'></div>", unsafe_allow_html=True)
+    menu = st.selectbox("📂 انتقل إلى القسم المطلوب:", allowed_menus)
     if st.button("🚪 تسجيل الخروج"):
         st.session_state.authenticated = False
         st.session_state.user_info = None
         st.rerun()
 
-st.markdown("<hr style='border: 1px solid #BE9D5F; margin-top: 10px; margin-bottom: 25px;'>", unsafe_allow_html=True)
+st.markdown("<hr style='border: 1px solid #BE9D5F; margin-top: 20px; margin-bottom: 25px;'>", unsafe_allow_html=True)
 
 conn = get_connection()
 
@@ -458,7 +465,7 @@ if menu == "📊 لوحة المؤشرات العامة والأرصدة":
         st.markdown(f"""<div class="metric-card"><div class="metric-title">رصيد الصندوق بالدولار الأمريكي (USD)</div><div class="metric-value-usd">{usd_bal:,.2f} $</div></div>""", unsafe_allow_html=True)
     with col2:
         syp_bal = df_vaults.loc[df_vaults['currency'] == 'SYP', 'current_balance'].values[0] if not df_vaults.empty else 0
-        st.markdown(f"""<div class="metric-card" style="border-right-color: #BE9D5F;"><div class="metric-title">رصيد الصندوق بالليرة السورية (SYP)</div><div class="metric-value-gold">{syp_bal:,.0f} <span style="font-size: 1.1rem; color: #44494B;">ل.س</span></div></div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div class="metric-card"><div class="metric-title">رصيد الصندوق بالليرة السورية (SYP)</div><div class="metric-value-gold">{syp_bal:,.0f} ل.س</div></div>""", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("🏗️ مؤشرات أداء المشاريع النشطة")
@@ -535,9 +542,9 @@ elif menu == "🤝 هيكل الشركاء ورأس المال والأرباح"
     with c1:
         st.markdown(f"""<div class="metric-card"><div class="metric-title">إجمالي رأس المال التأسيسي المدفوع</div><div class="metric-value-usd">{total_financial_capital:,.2f} $</div></div>""", unsafe_allow_html=True)
     with c2:
-        st.markdown(f"""<div class="metric-card" style="border-right-color: #BE9D5F;"><div class="metric-title">أرباح أتعاب الإدارة المتراكمة</div><div class="metric-value-gold">{total_company_profit:,.2f} $</div></div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div class="metric-card"><div class="metric-title">أرباح أتعاب الإدارة المتراكمة</div><div class="metric-value-gold">{total_company_profit:,.2f} $</div></div>""", unsafe_allow_html=True)
     with c3:
-        st.markdown(f"""<div class="metric-card" style="border-right-color: #44494B;"><div class="metric-title">حصة حمزة ديب الإدارية المحمية</div><div class="metric-value-usd" style="color: #BE9D5F;">{hamza_pct:.2f}%</div></div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div class="metric-card"><div class="metric-title">حصة حمزة ديب الإدارية المحمية</div><div class="metric-value-usd" style="color: #BE9D5F;">{hamza_pct:.2f}%</div></div>""", unsafe_allow_html=True)
 
     partners_breakdown = [
         {"الشريك": "مصعب المصري", "صفة الشراكة": "مؤسس وشريك مالي وإداري", "المساهمة برأس المال": f"{mosab_capital:,.2f} $", "نسبة المساهمة المالية": f"{(mosab_capital/total_financial_capital*100):.1f}%", "نسبة الملكية من الشركة": f"{mosab_pct:.2f}%", "الأرباح المحققة ($)": f"{(total_company_profit * mosab_pct / 100.0):,.2f} $"},
