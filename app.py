@@ -93,28 +93,29 @@ def ensure_database_schema():
 
 ensure_database_schema()
 
-# سكريبت إخفاء زر Manage app وعناصر التحكم البرمجية
+# سكريبت متقدم لإخفاء زر Manage app وعناصر التحكم
 st.components.v1.html("""
 <script>
-function cleanInterface() {
+function cleanStreamlitUI() {
     try {
         const contexts = [document, window.parent.document];
         contexts.forEach(doc => {
-            // إخفاء زر Manage app
-            const manageButtons = doc.querySelectorAll('[data-testid="manage-app-button"], .viewer-badge, [class*="viewerBadge"]');
-            manageButtons.forEach(el => el.style.setProperty('display', 'none', 'important'));
-
-            // إخفاء أي زر يحتوي نص Manage app
-            const allButtons = doc.querySelectorAll('button');
-            allButtons.forEach(btn => {
-                if (btn.innerText && btn.innerText.includes('Manage app')) {
-                    btn.style.setProperty('display', 'none', 'important');
+            const targets = doc.querySelectorAll('[data-testid="manage-app-button"], .viewer-badge, [class*="viewerBadge"], [data-testid="stToolbar"]');
+            targets.forEach(el => el.style.setProperty('display', 'none', 'important'));
+            
+            const buttons = doc.querySelectorAll('button');
+            buttons.forEach(b => {
+                if (b.innerText && (b.innerText.includes('Manage app') || b.innerText.includes('Manage'))) {
+                    if (b.closest('div')) {
+                        b.closest('div').style.setProperty('display', 'none', 'important');
+                    }
+                    b.style.setProperty('display', 'none', 'important');
                 }
             });
         });
     } catch(e) {}
 }
-setInterval(cleanInterface, 400);
+setInterval(cleanStreamlitUI, 300);
 </script>
 """, height=0, width=0)
 
@@ -224,21 +225,25 @@ def generate_receipt_pdf(tx_data, items_data):
     buffer.seek(0)
     return buffer.getvalue()
 
-# 3. الهوية البصرية وضبط أزرار التحكم بالسايد بار وإخفاء أدوات المطور
+# 3. الهوية البصرية وضبط شريط السايد بار بكامل الارتفاع
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
     * { font-family: 'Cairo', sans-serif !important; }
     
-    /* 1. إخفاء شريط أدوات ستريم ليت (جيت هاب، المشاركة، التعديل، زر Manage app) */
+    /* 1. إخفاء شريط أدوات ستريم ليت المطور وزر Manage app بالكامل */
     [data-testid="stToolbar"],
     .stAppDeployButton,
     #MainMenu,
     footer,
     div[data-testid="stDecoration"],
-    [data-testid="manage-app-button"] {
+    [data-testid="manage-app-button"],
+    .viewer-badge,
+    [class*="viewerBadge"] {
         display: none !important;
         visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
     }
 
     /* 2. إبقاء الهيدر شفافاً */
@@ -246,31 +251,81 @@ st.markdown("""
         background: transparent !important;
     }
 
-    /* 3. تثبيت زر إعادة فتح السايد بار ليبقى ظاهراً دائماً بلون أخضر وإطار ذهبي */
+    /* 3. زر السايد بار على كامل ارتفاع الشاشة (100vh) من أعلى الصفحة لأسفلها */
     [data-testid="collapsedControl"] {
         display: flex !important;
         visibility: visible !important;
         opacity: 1 !important;
         position: fixed !important;
-        top: 14px !important;
-        left: 14px !important;
+        top: 0 !important;
+        bottom: 0 !important;
+        height: 100vh !important;
+        width: 34px !important;
+        right: 0 !important;
+        left: auto !important;
         z-index: 999999 !important;
-    }
-    [data-testid="collapsedControl"] button {
-        background-color: #0F4733 !important;
-        color: #FFFFFF !important;
-        border: 1.5px solid #BE9D5F !important;
-        border-radius: 8px !important;
-        box-shadow: 0 4px 12px rgba(15, 71, 51, 0.25) !important;
-        width: 42px !important;
-        height: 42px !important;
-    }
-    [data-testid="collapsedControl"] svg {
-        fill: #FFFFFF !important;
-        stroke: #FFFFFF !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: transparent !important;
     }
 
-    /* 4. زر إغلاق السايد بار داخل القائمة */
+    [data-testid="collapsedControl"] button {
+        height: 100vh !important;
+        width: 34px !important;
+        border-radius: 0 !important;
+        background-color: #0F4733 !important;
+        border: none !important;
+        border-left: 2.5px solid #BE9D5F !important;
+        border-right: none !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 14px !important;
+        cursor: pointer !important;
+        transition: all 0.25s ease-in-out !important;
+        box-shadow: -3px 0 14px rgba(15, 71, 51, 0.35) !important;
+        padding: 0 !important;
+    }
+
+    [data-testid="collapsedControl"] button:hover {
+        background-color: #BE9D5F !important;
+        border-left: 2.5px solid #0F4733 !important;
+        width: 40px !important;
+    }
+
+    [data-testid="collapsedControl"] button svg {
+        fill: #FFFFFF !important;
+        stroke: #FFFFFF !important;
+        width: 22px !important;
+        height: 22px !important;
+        transition: all 0.2s ease !important;
+    }
+
+    [data-testid="collapsedControl"] button:hover svg {
+        fill: #0F4733 !important;
+        stroke: #0F4733 !important;
+        transform: scale(1.25) !important;
+    }
+
+    /* كتابة 'القائمة الرئيسية' طولياً على امتداد الشريط */
+    [data-testid="collapsedControl"] button::after {
+        content: "القائمة الرئيسية";
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
+        color: #FFFFFF;
+        font-weight: 800;
+        font-size: 13px;
+        letter-spacing: 4px;
+        transition: all 0.2s ease !important;
+    }
+
+    [data-testid="collapsedControl"] button:hover::after {
+        color: #0F4733;
+        font-weight: 900;
+    }
+
+    /* 4. زر إغلاق السايد بار من الداخل */
     button[data-testid="stSidebarCollapseButton"] {
         background-color: rgba(190, 157, 95, 0.2) !important;
         border: 1px solid #BE9D5F !important;
@@ -1026,7 +1081,7 @@ elif menu == "💳 مسيرات الرواتب الشهرية":
 
         st.caption(f"📌 نظام احتساب راتب هذا الموظف: **{type_label}**")
         col1, col2, col3, col4, col5 = st.columns(5)
-        with col1: st.metric("الأساسي", f"{base_s:,.2f} {curr_s}")
+        with col1: st.metric("الراتب الأساسي", f"{base_s:,.2f} {curr_s}")
         with col2: st.metric("إضافي الدوام", f"+{ot_val:,.2f}")
         with col3: st.metric("خصم الغياب", f"-{ded_abs_val:,.2f}")
         with col4: st.metric("سلف مسحوبة خلال الشهر", f"-{adv_taken:,.2f}", delta_color="inverse")
