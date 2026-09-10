@@ -234,15 +234,17 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ----------------------------------------------------
-# تسجيل الدخول وتهيئة قاعدة البيانات
+# تسجيل الدخول وتحديث هيكل الجداول تلقائياً
 # ----------------------------------------------------
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
     st.session_state.user_info = None
 
-def login_user(username, password):
+def init_and_login_user(username, password):
     conn = get_connection()
     cur = conn.cursor()
+    
+    # 1. إنشاء أو ترقية جدول المستخدمين
     cur.execute("""
         CREATE TABLE IF NOT EXISTS app_users (
             id SERIAL PRIMARY KEY,
@@ -250,10 +252,10 @@ def login_user(username, password):
             password VARCHAR(255) NOT NULL,
             full_name VARCHAR(255) NOT NULL,
             role VARCHAR(50) NOT NULL,
-            stakeholder_id INT,
-            is_active BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
+        ALTER TABLE app_users ADD COLUMN IF NOT EXISTS stakeholder_id INT;
+        ALTER TABLE app_users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
 
         CREATE TABLE IF NOT EXISTS office_appointments (
             id SERIAL PRIMARY KEY,
@@ -270,18 +272,26 @@ def login_user(username, password):
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
-        INSERT INTO app_users (username, password, full_name, role)
+        INSERT INTO app_users (username, password, full_name, role, is_active)
         VALUES 
-            ('hamza', 'hamza123', 'حمزة ديب', 'Admin'),
-            ('mosab', 'mosab123', 'مصعب المصري', 'Admin'),
-            ('samer', 'samer123', 'سامر ديب', 'Partner'),
-            ('manager', 'admin123', 'المدير العام', 'Manager'),
-            ('accountant', 'acc123', 'محاسب الشركة', 'Accountant'),
-            ('secretary', 'sec123', 'سكرتارية الاستقبال', 'Secretary')
-        ON CONFLICT (username) DO NOTHING;
+            ('hamza', 'hamza123', 'حمزة ديب', 'Admin', TRUE),
+            ('mosab', 'mosab123', 'مصعب المصري', 'Admin', TRUE),
+            ('samer', 'samer123', 'سامر ديب', 'Partner', TRUE),
+            ('manager', 'admin123', 'المدير العام', 'Manager', TRUE),
+            ('accountant', 'acc123', 'محاسب الشركة', 'Accountant', TRUE),
+            ('secretary', 'sec123', 'سكرتارية الاستقبال', 'Secretary', TRUE)
+        ON CONFLICT (username) DO UPDATE SET 
+            is_active = TRUE,
+            role = EXCLUDED.role;
     """)
     conn.commit()
-    cur.execute("SELECT id, username, full_name, role, stakeholder_id, is_active FROM app_users WHERE username = %s AND password = %s;", (username.strip(), password.strip()))
+
+    # 2. التحقق من بيانات الدخول
+    cur.execute("""
+        SELECT id, username, full_name, role, stakeholder_id, COALESCE(is_active, TRUE) 
+        FROM app_users 
+        WHERE username = %s AND password = %s;
+    """, (username.strip(), password.strip()))
     user = cur.fetchone()
     cur.close()
     conn.close()
@@ -307,7 +317,7 @@ if not st.session_state.authenticated:
             submitted = st.form_submit_button("تسجيل الدخول")
             if submitted:
                 if user_input and pass_input:
-                    user_data = login_user(user_input, pass_input)
+                    user_data = init_and_login_user(user_input, pass_input)
                     if user_data:
                         if not user_data[5]:
                             st.error("⚠️ هذا الحساب مجمد حالياً، يرجى مراجعة إدارة النظام.")
@@ -398,7 +408,6 @@ elif user_role == "Employee":
         "👤 كشف حسابي ودوامي الذاتي"
     ]
 
-# بناء القائمة الجانبية
 with st.sidebar:
     if logo_b64:
         st.markdown(f'<div style="text-align: center; margin-bottom: 8px;"><img src="data:image/png;base64,{logo_b64}" style="width: 110px;"></div>', unsafe_allow_html=True)
@@ -433,7 +442,6 @@ with st.sidebar:
         st.session_state.user_info = None
         st.rerun()
 
-# ترويسة الصفحة الرسمية
 col_title, col_logo = st.columns([5, 1])
 with col_title:
     st.markdown("""
@@ -707,6 +715,8 @@ elif menu == "📑 كشوفات حسابات المستثمرين":
 
         df_inv_tx = pd.read_sql(f"SELECT id AS \"رقم الفاتورة\", tx_date AS \"التاريخ\", tx_type AS \"نوع الحركة\", amount AS \"المبلغ\", currency AS \"العملة\", amount_usd AS \"المعادل $\", description AS \"البيان\" FROM transactions WHERE project_id = {proj_id} ORDER BY tx_date DESC;", conn)
         st.dataframe(df_inv_tx, use_container_width=True)
+    else:
+        st.info("لا توجد مشاريع.")
 
 # ====================================================
 # 7. التحويل والصرافة
@@ -962,12 +972,11 @@ elif menu == "🏢 حسابات المشاريع والمستثمرين":
     st.dataframe(pd.read_sql(q_calc, conn), use_container_width=True)
 
 # ====================================================
-# 16. الإدارة والتشغيل والتعاقدات (لوحة تحكم المستخدمين وكلمات السر الكاملة للأدمن)
+# 16. الإدارة والتشغيل والتعاقدات (لوحة تحكم المستخدمين وكلمات السر للأدمن)
 # ====================================================
 elif menu == "⚙️ الإدارة والتشغيل والتعاقدات":
     if user_role == "Admin":
         st.subheader("⚙️ لوحة تحكم الإدارة العليا (المستخدمين وكلمات المرور والصلاحيات)")
-
         tab_users_mgmt, tab_org_ops = st.tabs([
             "🔐 إدارة الحسابات وكلمات السر والصلاحيات",
             "🏗️ إدارة المشاريع والمستثمرين"
@@ -975,8 +984,6 @@ elif menu == "⚙️ الإدارة والتشغيل والتعاقدات":
 
         with tab_users_mgmt:
             st.markdown("### 📋 سجل المستخدمين وكلمات السر الحالية")
-            st.caption("كشف كامل بالحسابات وكلمات السر لإدارتها عند النسيان أو تعديل الصلاحيات:")
-            
             query_users_full = """
                 SELECT 
                     id AS "المعرف",
