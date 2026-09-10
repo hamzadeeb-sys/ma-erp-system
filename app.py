@@ -244,7 +244,6 @@ def init_and_login_user(username, password):
     conn = get_connection()
     cur = conn.cursor()
     
-    # 1. إنشاء أو ترقية جدول المستخدمين
     cur.execute("""
         CREATE TABLE IF NOT EXISTS app_users (
             id SERIAL PRIMARY KEY,
@@ -286,7 +285,6 @@ def init_and_login_user(username, password):
     """)
     conn.commit()
 
-    # 2. التحقق من بيانات الدخول
     cur.execute("""
         SELECT id, username, full_name, role, stakeholder_id, COALESCE(is_active, TRUE) 
         FROM app_users 
@@ -664,18 +662,36 @@ elif menu == "⏱️ جدول دوامات وساعات العمل":
             st.dataframe(pd.read_sql("SELECT s.name AS \"الموظف\", COUNT(CASE WHEN a.status = 'حاضر' THEN 1 END) AS \"أيام الحضور\", COUNT(CASE WHEN a.status = 'غياب' THEN 1 END) AS \"أيام الغياب\", COALESCE(SUM(a.total_hours), 0) AS \"إجمالي الساعات\" FROM stakeholders s LEFT JOIN employee_attendance a ON s.id = a.employee_id WHERE s.role IN ('Employee', 'Partner') GROUP BY s.id, s.name;", conn), use_container_width=True)
 
 # ====================================================
-# 5. كشف حساب الموظف الذاتي
+# 5. كشف حساب الموظف الذاتي (المربوط)
 # ====================================================
 elif menu == "👤 كشف حسابي ودوامي الذاتي":
-    st.subheader(f"👤 كشف الدوام والراتب الشخصي: {current_user['full_name']}")
+    st.subheader(f"👤 ملف الموظف ودوامه الشخصي: {current_user['full_name']}")
     emp_s_id = current_user.get("stakeholder_id")
+    
     if not emp_s_id:
-        st.info("لم يتم ربط هذا الحساب بملف موظف محدد.")
+        st.warning("⚠️ هذا الحساب غير مربوط حالياً بأي سجل موظف في قاعدة البيانات.")
+        st.info("يرجى مراجعة مسؤول النظام (Admin) لربط اسم المستخدم الخاص بك بملف الموظف التابع لك من شاشة إدارة الحسابات.")
     else:
-        st.markdown("#### ⏱️ سجل دوامك الشخصي")
-        st.dataframe(pd.read_sql(f"SELECT work_date AS \"التاريخ\", time_in AS \"الحضور\", time_out AS \"الانصراف\", total_hours AS \"الساعات\", status AS \"الحالة\" FROM employee_attendance WHERE employee_id = {emp_s_id} ORDER BY work_date DESC;", conn), use_container_width=True)
-        st.markdown("#### 💳 مسيرات الرواتب والمستحقات")
-        st.dataframe(pd.read_sql(f"SELECT payroll_month AS \"الشهر\", base_salary AS \"الأساسي\", overtime_amount AS \"الإضافي\", deductions AS \"الخصومات\", net_salary AS \"صافي الراتب\", currency AS \"العملة\", payment_status AS \"الحالة\" FROM payroll_records WHERE employee_id = {emp_s_id} ORDER BY payroll_month DESC;", conn), use_container_width=True)
+        st.markdown("#### ⏱️ سجل دوامك الشخصي خلال الفترة")
+        q_my_att = f"""
+            SELECT work_date AS "التاريخ", time_in AS "وقت الحضور", time_out AS "وقت الانصراف", total_hours AS "الساعات المحتسبة", status AS "الحالة", notes AS "ملاحظات" 
+            FROM employee_attendance 
+            WHERE employee_id = {emp_s_id} 
+            ORDER BY work_date DESC;
+        """
+        df_my_att = pd.read_sql(q_my_att, conn)
+        st.dataframe(df_my_att, use_container_width=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("#### 💳 كشف مسيرات الرواتب والمستحقات")
+        q_my_pay = f"""
+            SELECT payroll_month AS "الشهر", base_salary AS "الراتب الأساسي", overtime_amount AS "قيمة الإضافي (+)", deductions AS "الخصومات (-)", net_salary AS "صافي المستحق", currency AS "العملة", payment_status AS "حالة الدفع", transaction_id AS "رقم سند الصرف" 
+            FROM payroll_records 
+            WHERE employee_id = {emp_s_id} 
+            ORDER BY payroll_month DESC;
+        """
+        df_my_pay = pd.read_sql(q_my_pay, conn)
+        st.dataframe(df_my_pay, use_container_width=True)
 
 # ====================================================
 # 6. كشوفات حسابات المستثمرين
@@ -972,69 +988,92 @@ elif menu == "🏢 حسابات المشاريع والمستثمرين":
     st.dataframe(pd.read_sql(q_calc, conn), use_container_width=True)
 
 # ====================================================
-# 16. الإدارة والتشغيل والتعاقدات (لوحة تحكم المستخدمين وكلمات السر للأدمن)
+# 16. الإدارة والتشغيل والتعاقدات (لوحة ربط الموظفين بالحسابات الكاملة)
 # ====================================================
 elif menu == "⚙️ الإدارة والتشغيل والتعاقدات":
     if user_role == "Admin":
-        st.subheader("⚙️ لوحة تحكم الإدارة العليا (المستخدمين وكلمات المرور والصلاحيات)")
+        st.subheader("⚙️ لوحة تحكم الإدارة العليا (إدارة المستخدمين وربط الموظفين)")
+
         tab_users_mgmt, tab_org_ops = st.tabs([
-            "🔐 إدارة الحسابات وكلمات السر والصلاحيات",
+            "🔐 إدارة الحسابات وربط الموظفين وكلمات السر",
             "🏗️ إدارة المشاريع والمستثمرين"
         ])
 
         with tab_users_mgmt:
-            st.markdown("### 📋 سجل المستخدمين وكلمات السر الحالية")
+            st.markdown("### 📋 سجل الحسابات والموظفين المرتبطين بها")
             query_users_full = """
                 SELECT 
-                    id AS "المعرف",
-                    username AS "اسم الدخول",
-                    password AS "كلمة المرور 🔑",
-                    full_name AS "الاسم الكامل",
-                    role AS "الصلاحية الممنوحة",
-                    CASE WHEN is_active THEN 'نشط 🟢' ELSE 'مجمد 🛑' END AS "حالة الحساب",
-                    created_at::date AS "تاريخ الإنشاء"
-                FROM app_users
-                ORDER BY id ASC;
+                    u.id AS "المعرف",
+                    u.username AS "اسم الدخول",
+                    u.password AS "كلمة المرور 🔑",
+                    u.full_name AS "الاسم الكامل",
+                    u.role AS "الصلاحية",
+                    COALESCE(s.name, 'غير مربوط ⚠️') AS "الموظف المرتبط به",
+                    CASE WHEN u.is_active THEN 'نشط 🟢' ELSE 'مجمد 🛑' END AS "حالة الحساب",
+                    u.created_at::date AS "تاريخ الإنشاء"
+                FROM app_users u
+                LEFT JOIN stakeholders s ON u.stakeholder_id = s.id
+                ORDER BY u.id ASC;
             """
             df_users_full = pd.read_sql(query_users_full, conn)
             st.dataframe(df_users_full, use_container_width=True)
+
+            # جلب قائمة الموظفين المسجلين في النظام
+            emps_list_df = pd.read_sql("SELECT id, name FROM stakeholders WHERE role IN ('Employee', 'Partner') ORDER BY name;", conn)
+            emp_choices = ["بدون ربط (حساب عام / إداري)"] + [f"{row['name']} (ID: {row['id']})" for _, row in emps_list_df.iterrows()]
 
             st.markdown("---")
             col_u_edit, col_u_add = st.columns(2)
 
             with col_u_edit:
-                st.markdown("#### ✏️ تعديل حساب / تغيير كلمة سر / تجميد / صلاحية")
+                st.markdown("#### ✏️ تعديل حساب وربطه بموظف / تغيير كلمة السر")
                 all_usernames = df_users_full["اسم الدخول"].tolist()
                 sel_user = st.selectbox("اختر الحساب المطلوب تعديله:", all_usernames)
 
                 if sel_user:
                     cur = conn.cursor()
-                    cur.execute("SELECT id, username, password, full_name, role, is_active FROM app_users WHERE username = %s;", (sel_user,))
+                    cur.execute("SELECT id, username, password, full_name, role, is_active, stakeholder_id FROM app_users WHERE username = %s;", (sel_user,))
                     u_rec = cur.fetchone()
                     cur.close()
 
-                    u_id, u_usr, u_pwd, u_fn, u_rl, u_act = u_rec
+                    u_id, u_usr, u_pwd, u_fn, u_rl, u_act, u_stk_id = u_rec
                     roles_list = ["Admin", "Manager", "Accountant", "Secretary", "Partner", "Employee"]
                     rl_idx = roles_list.index(u_rl) if u_rl in roles_list else 0
 
+                    # تحديد المؤشر الافتراضي للموظف المرتبط حالياً
+                    curr_emp_idx = 0
+                    if u_stk_id:
+                        for idx, choice in enumerate(emp_choices):
+                            if f"ID: {u_stk_id})" in choice:
+                                curr_emp_idx = idx
+                                break
+
                     with st.form("edit_user_credentials_form"):
                         new_u_fn = st.text_input("الاسم الكامل", value=u_fn)
-                        new_u_pwd = st.text_input("كلمة المرور الجديدة", value=u_pwd)
+                        new_u_pwd = st.text_input("كلمة المرور", value=u_pwd)
                         new_u_rl = st.selectbox("تعديل الصلاحية", roles_list, index=rl_idx)
+                        
+                        # حقل ربط الموظف
+                        selected_emp_link = st.selectbox("الموظف المرتبط بهذا الحساب (لعرض دوامه وراتبه)", emp_choices, index=curr_emp_idx)
+                        
                         new_u_act = st.selectbox("حالة الحساب", ["نشط", "تجميد الحساب"], index=0 if u_act else 1)
 
                         save_user_changes = st.form_submit_button("💾 حفظ تعديلات الحساب فوراً")
                         if save_user_changes:
+                            new_stk_id = None
+                            if selected_emp_link != "بدون ربط (حساب عام / إداري)":
+                                new_stk_id = int(re.search(r'ID:\s*(\d+)', selected_emp_link).group(1))
+
                             cur = conn.cursor()
                             is_active_val = True if new_u_act == "نشط" else False
                             cur.execute("""
                                 UPDATE app_users
-                                SET full_name = %s, password = %s, role = %s, is_active = %s
+                                SET full_name = %s, password = %s, role = %s, is_active = %s, stakeholder_id = %s
                                 WHERE id = %s;
-                            """, (new_u_fn.strip(), new_u_pwd.strip(), new_u_rl, is_active_val, u_id))
+                            """, (new_u_fn.strip(), new_u_pwd.strip(), new_u_rl, is_active_val, new_stk_id, u_id))
                             conn.commit()
                             cur.close()
-                            st.success(f"تم تحديث بيانات الحساب '{sel_user}' بنجاح!")
+                            st.success(f"تم تحديث بيانات الحساب '{sel_user}' وربطه بالموظف بنجاح!")
                             st.rerun()
 
                     if sel_user not in ["hamza", "mosab"]:
@@ -1047,23 +1086,28 @@ elif menu == "⚙️ الإدارة والتشغيل والتعاقدات":
                             st.rerun()
 
             with col_u_add:
-                st.markdown("#### ➕ إنشاء حساب جديد")
+                st.markdown("#### ➕ إنشاء حساب جديد مع ربطه بموظف")
                 with st.form("add_new_app_user_form", clear_on_submit=True):
                     add_usr = st.text_input("اسم الدخول الجديد (Username)")
                     add_pwd = st.text_input("كلمة المرور (Password)")
                     add_fn = st.text_input("الاسم الكامل للمستخدم")
-                    add_rl = st.selectbox("تحديد الدور والصلاحية", ["Manager", "Accountant", "Secretary", "Partner", "Employee", "Admin"])
+                    add_rl = st.selectbox("تحديد الدور والصلاحية", ["Employee", "Secretary", "Accountant", "Manager", "Partner", "Admin"])
+                    add_emp_link = st.selectbox("ربط الحساب بموظف مسجل (اختياري)", emp_choices)
                     
                     if st.form_submit_button("🚀 تفعيل وإنشاء الحساب"):
                         if add_usr.strip() and add_pwd.strip():
+                            stk_id_to_insert = None
+                            if add_emp_link != "بدون ربط (حساب عام / إداري)":
+                                stk_id_to_insert = int(re.search(r'ID:\s*(\d+)', add_emp_link).group(1))
+
                             cur = conn.cursor()
                             try:
                                 cur.execute("""
-                                    INSERT INTO app_users (username, password, full_name, role, is_active)
-                                    VALUES (%s, %s, %s, %s, TRUE);
-                                """, (add_usr.strip(), add_pwd.strip(), add_fn.strip(), add_rl))
+                                    INSERT INTO app_users (username, password, full_name, role, is_active, stakeholder_id)
+                                    VALUES (%s, %s, %s, %s, TRUE, %s);
+                                """, (add_usr.strip(), add_pwd.strip(), add_fn.strip(), add_rl, stk_id_to_insert))
                                 conn.commit()
-                                st.success(f"تم إنشاء حساب '{add_usr}' بنجاح!")
+                                st.success(f"تم إنشاء حساب '{add_usr}' وربطه بنجاح!")
                                 st.rerun()
                             except Exception as e:
                                 conn.rollback()
