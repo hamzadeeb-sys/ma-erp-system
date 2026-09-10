@@ -6,7 +6,6 @@ import os
 import base64
 import io
 
-# مكتبات تصدير PDF
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -191,15 +190,21 @@ def generate_investor_statement_pdf(investor_name, proj_name, stats, tx_rows):
     buffer.seek(0)
     return buffer.getvalue()
 
-# 3. الهوية البصرية المعتمدة لشركة MA CO.
+# 3. الهوية البصرية المعتمدة (مع الحفاظ على خط الأيقونات الأصلي)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
     
-    html, body, [class*="css"], .stMarkdown, p, span, label, h1, h2, h3, h4, h5, button, input, select, textarea {
+    body, p, label, h1, h2, h3, h4, h5, button, input, select, textarea, .stMarkdown {
         font-family: 'Cairo', sans-serif !important;
         direction: rtl !important;
         text-align: right !important;
+    }
+
+    /* حماية خط الأيقونات من التداخل */
+    span[data-testid="stIconMaterial"], .material-symbols-rounded, i, svg {
+        font-family: 'Material Symbols Rounded' !important;
+        direction: ltr !important;
     }
 
     .stApp {
@@ -208,15 +213,6 @@ st.markdown("""
 
     .stDeployButton, footer, #MainMenu {
         display: none !important;
-    }
-
-    button[data-testid="stSidebarCollapseButton"],
-    button[data-testid="collapsedControl"] {
-        color: #BE9D5F !important;
-        background-color: #0F4733 !important;
-        border: 1px solid #BE9D5F !important;
-        border-radius: 8px !important;
-        margin: 5px !important;
     }
 
     section[data-testid="stSidebar"] {
@@ -503,7 +499,6 @@ elif menu == "🤝 هيكل الشركاء ورأس المال والأرباح"
     hamza_sal = float(h_data[1]) if h_data and h_data[1] is not None else 0.00
     hamza_sal_curr = h_data[2] if h_data and h_data[2] else 'USD'
 
-    # حساب رأس مال مصعب
     cur.execute("""
         SELECT COALESCE(SUM(amount_usd), 0)
         FROM transactions t
@@ -515,7 +510,6 @@ elif menu == "🤝 هيكل الشركاء ورأس المال والأرباح"
     if mosab_capital <= 0:
         mosab_capital = 11435.00
 
-    # حساب رأس مال سامر (يشمل أي دفعات رأس مال جديدة)
     cur.execute("""
         SELECT COALESCE(SUM(amount_usd), 0)
         FROM transactions t
