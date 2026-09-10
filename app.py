@@ -199,31 +199,58 @@ def generate_receipt_pdf(tx_data, items_data):
     buffer.seek(0)
     return buffer.getvalue()
 
-# 3. الهوية البصرية وإجراءات الأمان العالية
+# 3. الهوية البصرية وإخفاء الشريط العلوي بالكامل
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
     * { font-family: 'Cairo', sans-serif !important; }
     
-    /* 1. إغلاق أمني تام: إخفاء أشرطة Streamlit وأيقونة GitHub وزر المشاركة */
-    div[data-testid="stToolbar"], 
-    .stAppDeployButton, 
-    #MainMenu, 
-    footer,
-    a[href*="github.com"],
-    button[title="View app in GitHub"],
-    button[title="Manage app"] {
+    /* 1. إخفاء الشريط الملون العلوي تماماً */
+    div[data-testid="stDecoration"] {
         display: none !important;
-        visibility: hidden !important;
+        height: 0 !important;
     }
-    
-    /* حماية زر فتح السايد بار */
+
+    /* 2. جعل الهيدر بدون ارتفاع ومكانه غير محجوز */
     header[data-testid="stHeader"] {
         background: transparent !important;
+        height: 0px !important;
+    }
+
+    /* 3. إخفاء شريط الأدوات وأزرار المشاركة والتعديل وجيت هاب والقائمة الثلاثية */
+    header[data-testid="stHeader"] > div:last-child,
+    [data-testid="stToolbar"],
+    [class*="stToolbar"],
+    #MainMenu,
+    footer,
+    .stAppDeployButton,
+    a[href*="github.com"],
+    button[title*="GitHub"],
+    button[title*="Share"],
+    button[title*="Edit"],
+    button[title="Manage app"],
+    [data-testid="manage-app-button"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        width: 0 !important;
+        height: 0 !important;
+    }
+
+    /* 4. الحفاظ على زر إظهار السايد بار فقط ليعمل دون مشاكل */
+    header[data-testid="stHeader"] [data-testid="collapsedControl"],
+    header[data-testid="stHeader"] button[data-testid="stSidebarCollapseButton"] {
+        display: flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        width: auto !important;
+        height: auto !important;
     }
 
     [data-testid="stIconMaterial"], .material-symbols-rounded, button[data-testid="stSidebarCollapseButton"] *, button[data-testid="collapsedControl"] * { font-family: 'Material Symbols Rounded' !important; }
-    .block-container { direction: rtl !important; text-align: right !important; padding-top: 2.5rem !important; padding-bottom: 3rem !important; }
+    .block-container { direction: rtl !important; text-align: right !important; padding-top: 3rem !important; padding-bottom: 3rem !important; }
     .stApp { background-color: #F9F9F8 !important; }
     
     section[data-testid="stSidebar"] { background-color: #0F4733 !important; border: none !important; direction: rtl !important; text-align: right !important; }
