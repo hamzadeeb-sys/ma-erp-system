@@ -190,21 +190,27 @@ def generate_investor_statement_pdf(investor_name, proj_name, stats, tx_rows):
     buffer.seek(0)
     return buffer.getvalue()
 
-# 3. الهوية البصرية المعتمدة (مع الحفاظ على خط الأيقونات الأصلي)
+# 3. الهوية البصرية المنضبطة تماماً
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
     
-    body, p, label, h1, h2, h3, h4, h5, button, input, select, textarea, .stMarkdown {
+    * {
         font-family: 'Cairo', sans-serif !important;
-        direction: rtl !important;
-        text-align: right !important;
     }
 
-    /* حماية خط الأيقونات من التداخل */
-    span[data-testid="stIconMaterial"], .material-symbols-rounded, i, svg {
+    /* حماية خط الأيقونات وأسهم التحكم من التداخل */
+    [data-testid="stIconMaterial"], 
+    .material-symbols-rounded, 
+    button[data-testid="stSidebarCollapseButton"] *,
+    button[data-testid="collapsedControl"] * {
         font-family: 'Material Symbols Rounded' !important;
-        direction: ltr !important;
+    }
+
+    .block-container {
+        direction: rtl !important;
+        text-align: right !important;
+        padding-top: 2rem !important;
     }
 
     .stApp {
@@ -215,20 +221,26 @@ st.markdown("""
         display: none !important;
     }
 
+    /* ضبط السايد بار وإزالة الخط عند الإغلاق */
     section[data-testid="stSidebar"] {
         background-color: #0F4733 !important;
-        border-left: 2px solid #BE9D5F;
+        border: none !important;
+        direction: rtl !important;
+        text-align: right !important;
     }
-    section[data-testid="stSidebar"] * {
-        color: #FFFFFF !important;
+    
+    /* يظهر الخط الذهبي فقط عندما تكون القائمة مفتوحة */
+    section[data-testid="stSidebar"][aria-expanded="true"] {
+        border-left: 2px solid #BE9D5F !important;
     }
 
-    input, textarea, select, div[data-baseweb="select"] > div {
-        background-color: #FFFFFF !important;
-        color: #44494B !important;
-        border: 1.5px solid #A29F98 !important;
-        border-radius: 8px !important;
-        font-weight: 600 !important;
+    /* إخفاء أي إطار نهائياً عند طي القائمة */
+    section[data-testid="stSidebar"][aria-expanded="false"] {
+        border: none !important;
+    }
+
+    section[data-testid="stSidebar"] * {
+        color: #FFFFFF !important;
     }
 
     .metric-card {
@@ -257,6 +269,16 @@ st.markdown("""
         color: #BE9D5F;
         font-size: 2rem;
         font-weight: 900;
+    }
+
+    input, textarea, select, div[data-baseweb="select"] > div {
+        background-color: #FFFFFF !important;
+        color: #44494B !important;
+        border: 1.5px solid #A29F98 !important;
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+        direction: rtl !important;
+        text-align: right !important;
     }
 
     .stButton > button, .stDownloadButton > button {
@@ -412,16 +434,19 @@ with st.sidebar:
 # ----------------------------------------------------
 # ترويسة الصفحة الرسمية
 # ----------------------------------------------------
-logo_header_img = f'<img src="data:image/png;base64,{logo_b64}" style="height: 50px;">' if logo_b64 else ''
-st.markdown(f"""
-    <div style="display: flex; align-items: center; gap: 15px; border-bottom: 2px solid #BE9D5F; padding-bottom: 12px; margin-bottom: 25px; direction: rtl;">
-        {logo_header_img}
-        <div>
+col_title, col_logo = st.columns([5, 1])
+with col_title:
+    st.markdown("""
+        <div style="direction: rtl; text-align: right;">
             <h2 style="margin: 0; padding: 0; font-size: 1.7rem; color: #0F4733; font-weight: 800;">منظومة الإدارة والرقابة المالية</h2>
             <div style="color: #BE9D5F; font-size: 0.9rem; font-weight: 700; margin-top: 3px;">MA Real Estate Development &amp; Contracting</div>
         </div>
-    </div>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
+with col_logo:
+    if logo_b64:
+        st.markdown(f'<div style="text-align: left;"><img src="data:image/png;base64,{logo_b64}" style="height: 48px;"></div>', unsafe_allow_html=True)
+
+st.markdown("<hr style='border: 1px solid #BE9D5F; margin-top: 8px; margin-bottom: 25px;'>", unsafe_allow_html=True)
 
 conn = get_connection()
 
