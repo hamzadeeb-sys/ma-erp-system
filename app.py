@@ -672,12 +672,10 @@ elif menu == "👤 كشف حسابي ودوامي الذاتي":
         st.warning("⚠️ هذا الحساب غير مربوط حالياً بملف موظف في قاعدة البيانات.")
         st.info("يرجى مراجعة مسؤول النظام (Admin) لربط اسم المستخدم الخاص بك بملف الموظف من شاشة إدارة الحسابات.")
     else:
-        # جلب البيانات المالية الأساسية للموظف
         cur = conn.cursor()
         cur.execute("SELECT name, salary_amount, salary_currency, role FROM stakeholders WHERE id = %s;", (emp_s_id,))
         emp_meta = cur.fetchone()
         
-        # حساب إجمالي المبالغ المصروفة له فعلياً في سجل الفواتير العام
         cur.execute("""
             SELECT COALESCE(SUM(amount), 0), COUNT(id)
             FROM transactions
@@ -878,7 +876,7 @@ elif menu == "🖨️ طباعة السندات وتصدير التقارير":
         st.download_button("📥 تنزيل سجل الحركات Excel", data=to_excel_download_link(df_all_tx, "transactions.xlsx"), file_name="MA_Transactions.xlsx")
 
 # ====================================================
-# 9. مسيرات الرواتب الشهرية (للمحاسب والإدارة)
+# 9. مسيرات الرواتب الشهرية
 # ====================================================
 elif menu == "💳 مسيرات الرواتب الشهرية":
     st.subheader("💳 احتساب وصرف مسيرات الرواتب وخصم السلف")
@@ -892,7 +890,6 @@ elif menu == "💳 مسيرات الرواتب الشهرية":
         base_s = float(emp_row['salary_amount'])
         curr_s = str(emp_row['salary_currency'])
 
-        # جلب ساعات الدوام والغياب
         cur = conn.cursor()
         cur.execute("SELECT COALESCE(SUM(overtime_hours), 0), COUNT(CASE WHEN status = 'غياب' THEN 1 END) FROM employee_attendance WHERE employee_id = %s AND TO_CHAR(work_date, 'YYYY-MM') = %s;", (emp_id, p_month))
         att_d = cur.fetchone()
@@ -900,7 +897,6 @@ elif menu == "💳 مسيرات الرواتب الشهرية":
         ot_val = ot_h * (base_s / 240.0) * 1.5
         ded_abs_val = abs_d * (base_s / 30.0)
 
-        # جلب إجمالي السلف النقدية المصروفة للموظف خلال هذا الشهر
         cur.execute("""
             SELECT COALESCE(SUM(amount), 0)
             FROM transactions
@@ -928,7 +924,6 @@ elif menu == "💳 مسيرات الرواتب الشهرية":
                 s_rate = float(cur.fetchone()[0] or 131.0)
                 amt_u = net_s if curr_s == 'USD' else (net_s / s_rate)
                 
-                # تسجيل الحركة المالية لصافي المبلغ المتبقي
                 if net_s > 0:
                     cur.execute("INSERT INTO transactions (id, tx_date, tx_type, project_id, stakeholder_id, vault_id, amount, currency, exchange_rate, amount_usd, direction, payment_method, description) VALUES (%s, CURRENT_DATE, 'راتب او سلفة', 1, %s, %s, %s, %s, %s, %s, 'OUT', 'كاش', %s);", (sal_id, emp_id, v_id, net_s, curr_s, s_rate if curr_s == 'SYP' else 1.0, amt_u, f"صرف صافي راتب شهر {p_month} بعد خصم السلف"))
                 
@@ -971,10 +966,49 @@ elif menu == "📦 إدارة المخزون ومواد المشاريع":
 # 11. دليل الأطراف (الجهات الخارجية)
 # ====================================================
 elif menu == "👥 دليل وتعديل بيانات الأطراف":
-    st.subheader("👥 دليل كافة الأطراف والجهات الخارجية")
-    tab_list, tab_add_ext = st.tabs(["📋 قائمة الأطراف المسجلة", "➕ إضافة جهة تعامل / طرف خارجي"])
+    st.subheader("👥 دليل وتعديل بيانات الأطراف والموظفين")
+    tab_list, tab_add_ext = st.tabs(["📋 قائمة وتعديل الأطراف المسجلة", "➕ إضافة جهة تعامل / طرف خارجي"])
+    
     with tab_list:
-        st.dataframe(pd.read_sql("SELECT id AS \"المعرف\", name AS \"الاسم\", role AS \"الدور\", phone AS \"الهاتف\", notes AS \"البيان\" FROM stakeholders ORDER BY id ASC;", conn), use_container_width=True)
+        st.dataframe(pd.read_sql("SELECT id AS \"المعرف\", name AS \"الاسم\", role AS \"الدور\", salary_amount AS \"الراتب الثابت\", salary_currency AS \"العملة\", phone AS \"الهاتف\", notes AS \"البيان\" FROM stakeholders ORDER BY id ASC;", conn), use_container_width=True)
+        
+        st.markdown("<br><hr>", unsafe_allow_html=True)
+        st.markdown("### ✏️ تعديل الراتب الثابت أو بيانات أي طرف / موظف")
+        st.caption("من هنا يمكنك تحديد أو تعديل الراتب الثابت لأي موظف ليظهر في حسابات الرواتب:")
+        
+        all_stk = pd.read_sql("SELECT id, name FROM stakeholders ORDER BY name;", conn)
+        if not all_stk.empty:
+            chosen_stk_name = st.selectbox("اختر الطرف أو الموظف للتعديل:", [""] + all_stk['name'].tolist())
+            if chosen_stk_name:
+                cur = conn.cursor()
+                cur.execute("SELECT id, name, role, salary_amount, salary_currency, phone, notes FROM stakeholders WHERE name = %s;", (chosen_stk_name,))
+                stk_rec = cur.fetchone()
+                cur.close()
+                
+                s_id, s_name, s_role, s_sal, s_curr, s_phone, s_notes = stk_rec
+                roles_opts = ["Employee", "General", "Investor", "Partner"]
+                r_idx = roles_opts.index(s_role) if s_role in roles_opts else 0
+
+                with st.form("edit_stakeholder_salary_form"):
+                    ed_name = st.text_input("اسم الطرف", value=s_name)
+                    ed_role = st.selectbox("الدور في النظام", roles_opts, index=r_idx)
+                    ed_sal = st.number_input("الراتب الشهري الثابت", min_value=0.0, value=float(s_sal or 0.0), step=50.0)
+                    ed_curr = st.selectbox("عملة الراتب", ["USD", "SYP"], index=0 if s_curr == "USD" else 1)
+                    ed_phone = st.text_input("الهاتف", value=s_phone or "")
+                    ed_notes = st.text_area("ملاحظات", value=s_notes or "")
+
+                    if st.form_submit_button("💾 حفظ تعديلات الراتب والبيانات"):
+                        cur = conn.cursor()
+                        cur.execute("""
+                            UPDATE stakeholders 
+                            SET name = %s, role = %s, salary_amount = %s, salary_currency = %s, phone = %s, notes = %s
+                            WHERE id = %s;
+                        """, (ed_name.strip(), ed_role, ed_sal, ed_curr, ed_phone.strip(), ed_notes.strip(), s_id))
+                        conn.commit()
+                        cur.close()
+                        st.success(f"تم تحديث بيانات '{ed_name}' والراتب الثابت بنجاح!")
+                        st.rerun()
+
     with tab_add_ext:
         if user_role in ["Admin", "Accountant"]:
             with st.form("ext_party_form", clear_on_submit=True):
@@ -1039,36 +1073,79 @@ elif menu == "➕ إضافة فاتورة وحركة متعددة البنود":
                 st.rerun()
 
 # ====================================================
-# 14. تعديل / إلغاء حركة مالية
+# 14. تعديل / إلغاء حركة مالية (وربط الحركات القديمة بالأطراف)
 # ====================================================
 elif menu == "✏️ تعديل / إلغاء حركة مالية":
     if user_role in ["Admin", "Accountant"]:
-        st.subheader("✏️ تعديل أو حذف سند مالي")
-        tx_l = pd.read_sql("SELECT id FROM transactions ORDER BY tx_date DESC LIMIT 50;", conn)['id'].tolist()
-        s_tx = st.selectbox("اختر رقم السند", [""] + tx_l)
-        if s_tx:
-            cur = conn.cursor()
-            cur.execute("SELECT amount, description FROM transactions WHERE id = %s;", (s_tx,))
-            r_tx = cur.fetchone()
-            cur.close()
-            with st.form("edit_f"):
-                n_amt = st.number_input("المبلغ", value=float(r_tx[0]))
-                n_notes = st.text_area("البيان", value=r_tx[1] or "")
-                if st.form_submit_button("💾 حفظ التعديل"):
-                    cur = conn.cursor()
-                    cur.execute("UPDATE transactions SET amount = %s, description = %s WHERE id = %s;", (n_amt, n_notes, s_tx))
-                    conn.commit()
-                    cur.close()
-                    st.success("تم التعديل!")
-                    st.rerun()
-            if user_role == "Admin":
-                if st.button("🗑️ حذف السند نهائياً"):
-                    cur = conn.cursor()
-                    cur.execute("DELETE FROM transactions WHERE id = %s;", (s_tx,))
-                    conn.commit()
-                    cur.close()
-                    st.success("تم حذف السند!")
-                    st.rerun()
+        st.subheader("✏️ تعديل أو حذف سند مالي (أو ربط السندات القديمة بالموظفين والأطراف)")
+        st.caption("إذا كانت لديك سندات قديمة غير مرتبطة بمستفيد، يمكنك اختيار السند هنا وتعديل الطرف المرتبط به:")
+        
+        tx_list_full = pd.read_sql("""
+            SELECT t.id, t.tx_date, t.amount, t.currency, COALESCE(s.name, 'غير مرتبطة ⚠️') AS stakeholder 
+            FROM transactions t 
+            LEFT JOIN stakeholders s ON t.stakeholder_id = s.id 
+            ORDER BY t.tx_date DESC LIMIT 100;
+        """, conn)
+        
+        if not tx_list_full.empty:
+            tx_options_str = [f"{r['id']} | {r['tx_date']} | {r['amount']} {r['currency']} | الطرف: {r['stakeholder']}" for _, r in tx_list_full.iterrows()]
+            chosen_str = st.selectbox("اختر السند المطلوب تعديله أو ربطه:", [""] + tx_options_str)
+            
+            if chosen_str:
+                selected_tx_id = chosen_str.split(" | ")[0]
+                cur = conn.cursor()
+                cur.execute("SELECT amount, description, stakeholder_id, project_id FROM transactions WHERE id = %s;", (selected_tx_id,))
+                r_tx = cur.fetchone()
+                cur.close()
+                
+                curr_amt, curr_desc, curr_stk_id, curr_proj_id = r_tx
+                all_stk_df = pd.read_sql("SELECT id, name FROM stakeholders ORDER BY name;", conn)
+                all_proj_df = pd.read_sql("SELECT id, name FROM projects ORDER BY name;", conn)
+                
+                stk_idx = 0
+                if curr_stk_id:
+                    for idx, row in all_stk_df.iterrows():
+                        if row['id'] == curr_stk_id:
+                            stk_idx = idx
+                            break
+                            
+                proj_idx = 0
+                if curr_proj_id:
+                    for idx, row in all_proj_df.iterrows():
+                        if row['id'] == curr_proj_id:
+                            proj_idx = idx
+                            break
+
+                with st.form("edit_tx_and_party_form"):
+                    st.markdown(f"#### تعديل السند: `{selected_tx_id}`")
+                    ed_party = st.selectbox("الطرف أو الموظف أو المورد المرتبط بالسند", all_stk_df['name'].tolist(), index=stk_idx)
+                    ed_proj = st.selectbox("المشروع المرتبط", all_proj_df['name'].tolist(), index=proj_idx)
+                    ed_amt = st.number_input("المبلغ", value=float(curr_amt))
+                    ed_notes = st.text_area("البيان والملاحظات", value=curr_desc or "")
+                    
+                    if st.form_submit_button("💾 حفظ تعديل السند وربطه بالطرف فوراً"):
+                        new_s_id = int(all_stk_df.loc[all_stk_df['name'] == ed_party, 'id'].values[0])
+                        new_p_id = int(all_proj_df.loc[all_proj_df['name'] == ed_proj, 'id'].values[0])
+                        
+                        cur = conn.cursor()
+                        cur.execute("""
+                            UPDATE transactions 
+                            SET stakeholder_id = %s, project_id = %s, amount = %s, description = %s
+                            WHERE id = %s;
+                        """, (new_s_id, new_p_id, ed_amt, ed_notes.strip(), selected_tx_id))
+                        conn.commit()
+                        cur.close()
+                        st.success(f"تم ربط السند '{selected_tx_id}' بالطرف '{ed_party}' وتحديثه بنجاح!")
+                        st.rerun()
+
+                if user_role == "Admin":
+                    if st.button(f"🗑️ حذف السند {selected_tx_id} نهائياً"):
+                        cur = conn.cursor()
+                        cur.execute("DELETE FROM transactions WHERE id = %s;", (selected_tx_id,))
+                        conn.commit()
+                        cur.close()
+                        st.success("تم حذف السند!")
+                        st.rerun()
 
 # ====================================================
 # 15. حسابات المشاريع والمستثمرين
@@ -1085,7 +1162,7 @@ elif menu == "🏢 حسابات المشاريع والمستثمرين":
     st.dataframe(pd.read_sql(q_calc, conn), use_container_width=True)
 
 # ====================================================
-# 16. الإدارة والتشغيل والتعاقدات (ربط الحسابات)
+# 16. الإدارة والتشغيل والتعاقدات
 # ====================================================
 elif menu == "⚙️ الإدارة والتشغيل والتعاقدات":
     if user_role == "Admin":
