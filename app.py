@@ -199,24 +199,43 @@ def generate_receipt_pdf(tx_data, items_data):
     buffer.seek(0)
     return buffer.getvalue()
 
-# 3. الهوية البصرية والتنسيق
+# 3. الهوية البصرية وإجراءات الأمان العالية
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
     * { font-family: 'Cairo', sans-serif !important; }
+    
+    /* 1. إغلاق أمني تام: إخفاء أشرطة Streamlit وأيقونة GitHub وزر المشاركة */
+    div[data-testid="stToolbar"], 
+    .stAppDeployButton, 
+    #MainMenu, 
+    footer,
+    a[href*="github.com"],
+    button[title="View app in GitHub"],
+    button[title="Manage app"] {
+        display: none !important;
+        visibility: hidden !important;
+    }
+    
+    /* حماية زر فتح السايد بار */
+    header[data-testid="stHeader"] {
+        background: transparent !important;
+    }
+
     [data-testid="stIconMaterial"], .material-symbols-rounded, button[data-testid="stSidebarCollapseButton"] *, button[data-testid="collapsedControl"] * { font-family: 'Material Symbols Rounded' !important; }
-    .block-container { direction: rtl !important; text-align: right !important; padding-top: 5rem !important; padding-bottom: 3rem !important; }
-    header[data-testid="stHeader"] { background: transparent !important; }
+    .block-container { direction: rtl !important; text-align: right !important; padding-top: 2.5rem !important; padding-bottom: 3rem !important; }
     .stApp { background-color: #F9F9F8 !important; }
-    .stDeployButton, footer, #MainMenu { display: none !important; }
+    
     section[data-testid="stSidebar"] { background-color: #0F4733 !important; border: none !important; direction: rtl !important; text-align: right !important; }
     section[data-testid="stSidebar"][aria-expanded="true"] { border-left: 2px solid #BE9D5F !important; }
     section[data-testid="stSidebar"][aria-expanded="false"] { border: none !important; }
     section[data-testid="stSidebar"] * { color: #FFFFFF !important; }
+    
     .metric-card { background: #FFFFFF; border-radius: 12px; padding: 18px 20px; border: 1px solid #E2E1DE; border-right: 6px solid #0F4733; box-shadow: 0 4px 15px rgba(15, 71, 51, 0.05); margin-bottom: 18px; direction: rtl; text-align: right; }
     .metric-title { color: #A29F98; font-size: 0.95rem; font-weight: 700; margin-bottom: 6px; }
     .metric-value-usd { color: #0F4733; font-size: 2rem; font-weight: 900; }
     .metric-value-gold { color: #BE9D5F; font-size: 2rem; font-weight: 900; }
+    
     input, textarea, select, div[data-baseweb="select"] > div { background-color: #FFFFFF !important; color: #44494B !important; border: 1.5px solid #A29F98 !important; border-radius: 8px !important; font-weight: 600 !important; direction: rtl !important; text-align: right !important; }
     .stButton > button, .stDownloadButton > button { background-color: #0F4733 !important; color: #FFFFFF !important; border: 1.5px solid #BE9D5F !important; border-radius: 8px !important; padding: 8px 24px !important; font-weight: 800 !important; box-shadow: 0 4px 12px rgba(15, 71, 51, 0.15); }
     .stButton > button:hover, .stDownloadButton > button:hover { background-color: #BE9D5F !important; color: #0F4733 !important; border-color: #0F4733 !important; }
@@ -224,7 +243,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ----------------------------------------------------
-# بوابة تسجيل الدخول
+# تسجيل الدخول
 # ----------------------------------------------------
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
@@ -354,7 +373,6 @@ elif user_role == "Employee":
         "👤 كشف حسابي ودوامي الذاتي"
     ]
 
-# القاموس الموحد للمصطلحات بالعربية
 ROLE_NAME_AR = {
     "Admin": "مدير النظام العام",
     "Manager": "المدير العام (قراءة واطلاع)",
