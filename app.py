@@ -209,7 +209,7 @@ def generate_investor_statement_pdf(investor_name, proj_name, stats, tx_rows):
     buffer.seek(0)
     return buffer.getvalue()
 
-# 3. الهوية البصرية وضبط المسافات الرأسية
+# 3. الهوية البصرية
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
@@ -234,7 +234,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ----------------------------------------------------
-# بوابة تسجيل الدخول والأمان وتهيئة الجداول
+# تسجيل الدخول وتهيئة قاعدة البيانات
 # ----------------------------------------------------
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
@@ -243,14 +243,13 @@ if "authenticated" not in st.session_state:
 def login_user(username, password):
     conn = get_connection()
     cur = conn.cursor()
-    # إنشاء الجداول ونظام المستخدمين تلقائياً
     cur.execute("""
         CREATE TABLE IF NOT EXISTS app_users (
             id SERIAL PRIMARY KEY,
             username VARCHAR(100) UNIQUE NOT NULL,
             password VARCHAR(255) NOT NULL,
             full_name VARCHAR(255) NOT NULL,
-            role VARCHAR(50) NOT NULL, -- Admin, Accountant, Manager, Secretary, Partner, Employee
+            role VARCHAR(50) NOT NULL,
             stakeholder_id INT,
             is_active BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -260,12 +259,12 @@ def login_user(username, password):
             id SERIAL PRIMARY KEY,
             visitor_name VARCHAR(255) NOT NULL,
             visitor_phone VARCHAR(100),
-            visit_type VARCHAR(50) NOT NULL, -- 'موعد مسبق' أو 'زيارة فورية'
+            visit_type VARCHAR(50) NOT NULL,
             visit_date DATE NOT NULL,
             visit_time TIME,
-            host_person VARCHAR(255), -- الشخص المطلوب مقابلته
+            host_person VARCHAR(255),
             purpose VARCHAR(255),
-            status VARCHAR(50) DEFAULT 'مكتملة', -- قيد الانتظار, جارية, مكتملة, ملغية
+            status VARCHAR(50) DEFAULT 'مكتملة',
             notes TEXT,
             recorded_by VARCHAR(100),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -282,7 +281,7 @@ def login_user(username, password):
         ON CONFLICT (username) DO NOTHING;
     """)
     conn.commit()
-    cur.execute("SELECT id, username, full_name, role, stakeholder_id FROM app_users WHERE username = %s AND password = %s AND is_active = TRUE;", (username.strip(), password.strip()))
+    cur.execute("SELECT id, username, full_name, role, stakeholder_id, is_active FROM app_users WHERE username = %s AND password = %s;", (username.strip(), password.strip()))
     user = cur.fetchone()
     cur.close()
     conn.close()
@@ -310,16 +309,19 @@ if not st.session_state.authenticated:
                 if user_input and pass_input:
                     user_data = login_user(user_input, pass_input)
                     if user_data:
-                        st.session_state.authenticated = True
-                        st.session_state.user_info = {
-                            "id": user_data[0],
-                            "username": user_data[1],
-                            "full_name": user_data[2],
-                            "role": user_data[3],
-                            "stakeholder_id": user_data[4]
-                        }
-                        st.success(f"مرحباً بك: {user_data[2]}")
-                        st.rerun()
+                        if not user_data[5]:
+                            st.error("⚠️ هذا الحساب مجمد حالياً، يرجى مراجعة إدارة النظام.")
+                        else:
+                            st.session_state.authenticated = True
+                            st.session_state.user_info = {
+                                "id": user_data[0],
+                                "username": user_data[1],
+                                "full_name": user_data[2],
+                                "role": user_data[3],
+                                "stakeholder_id": user_data[4]
+                            }
+                            st.success(f"مرحباً بك: {user_data[2]}")
+                            st.rerun()
                     else:
                         st.error("اسم المستخدم أو كلمة المرور غير صحيحة!")
                 else:
@@ -327,12 +329,11 @@ if not st.session_state.authenticated:
     st.stop()
 
 # ----------------------------------------------------
-# الصلاحيات وتوزيع الشاشات بحسب الدور
+# الصلاحيات وتوزيع الشاشات
 # ----------------------------------------------------
 current_user = st.session_state.user_info
 user_role = current_user['role']
 
-# تحديد القوائم المسموحة لكل مستخدم
 if user_role == "Admin":
     allowed_menus = [
         "📊 لوحة المؤشرات العامة والأرصدة",
@@ -351,7 +352,7 @@ if user_role == "Admin":
         "🏢 حسابات المشاريع والمستثمرين",
         "⚙️ الإدارة والتشغيل والتعاقدات"
     ]
-elif user_role == "Manager": # المدير العام (اطلاع وقراءة فقط على كل شيء دون تعديل)
+elif user_role == "Manager":
     allowed_menus = [
         "📊 لوحة المؤشرات العامة والأرصدة",
         "🤝 هيكل الشركاء ورأس المال والأرباح",
@@ -365,7 +366,7 @@ elif user_role == "Manager": # المدير العام (اطلاع وقراءة 
         "📑 دفتر الحركات وسجل الفواتير",
         "🏢 حسابات المشاريع والمستثمرين"
     ]
-elif user_role == "Accountant": # المحاسب
+elif user_role == "Accountant":
     allowed_menus = [
         "📊 لوحة المؤشرات العامة والأرصدة",
         "📑 كشوفات حسابات المستثمرين",
@@ -380,19 +381,19 @@ elif user_role == "Accountant": # المحاسب
         "✏️ تعديل / إلغاء حركة مالية",
         "🏢 حسابات المشاريع والمستثمرين"
     ]
-elif user_role == "Partner": # الشريك (مثل سامر ديب)
+elif user_role == "Partner":
     allowed_menus = [
         "📊 لوحة المؤشرات العامة والأرصدة",
         "🤝 هيكل الشركاء ورأس المال والأرباح",
         "🏢 حسابات المشاريع والمستثمرين",
         "🖨️ طباعة السندات وتصدير التقارير"
     ]
-elif user_role == "Secretary": # السكرتاريا (المواعيد وتسجيل الدوام اليومي فقط)
+elif user_role == "Secretary":
     allowed_menus = [
         "📅 سجل المواعيد والزيارات",
         "⏱️ جدول دوامات وساعات العمل"
     ]
-elif user_role == "Employee": # حساب الموظف الذاتي
+elif user_role == "Employee":
     allowed_menus = [
         "👤 كشف حسابي ودوامي الذاتي"
     ]
@@ -463,20 +464,10 @@ if menu == "📊 لوحة المؤشرات العامة والأرصدة":
     col1, col2 = st.columns(2)
     with col1:
         usd_bal = df_vaults.loc[df_vaults['currency'] == 'USD', 'current_balance'].values[0] if not df_vaults.empty else 0
-        st.markdown(f"""
-            <div class="metric-card" style="border-right-color: #0F4733;">
-                <div class="metric-title">رصيد الخزينة بالدولار الأمريكي (USD)</div>
-                <div class="metric-value-usd">${usd_bal:,.2f}</div>
-            </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"""<div class="metric-card"><div class="metric-title">رصيد الخزينة بالدولار الأمريكي (USD)</div><div class="metric-value-usd">${usd_bal:,.2f}</div></div>""", unsafe_allow_html=True)
     with col2:
         syp_bal = df_vaults.loc[df_vaults['currency'] == 'SYP', 'current_balance'].values[0] if not df_vaults.empty else 0
-        st.markdown(f"""
-            <div class="metric-card" style="border-right-color: #BE9D5F;">
-                <div class="metric-title">رصيد الخزينة بالليرة السورية (SYP)</div>
-                <div class="metric-value-gold">{syp_bal:,.0f} <span style="font-size: 1.1rem; color: #44494B;">ل.س</span></div>
-            </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"""<div class="metric-card" style="border-right-color: #BE9D5F;"><div class="metric-title">رصيد الخزينة بالليرة السورية (SYP)</div><div class="metric-value-gold">{syp_bal:,.0f} <span style="font-size: 1.1rem; color: #44494B;">ل.س</span></div></div>""", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("🏗️ مؤشرات أداء المشاريع النشطة")
@@ -568,52 +559,25 @@ elif menu == "🤝 هيكل الشركاء ورأس المال والأرباح"
     cur.close()
 
 # ====================================================
-# 3. سجل المواعيد والزيارات (قسم السكرتاريا المخصص)
+# 3. سجل المواعيد والزيارات
 # ====================================================
 elif menu == "📅 سجل المواعيد والزيارات":
     st.subheader("📅 سجل تنظيم المواعيد وزيارات المكتب (مسبقة وفورية)")
-    st.caption("توثيق ومتابعة كافة المقابلات والضيوف القادمين إلى الشركة:")
-
-    tab_v_list, tab_v_new = st.tabs([
-        "📋 جدول الزيارات والمواعيد المسجلة",
-        "➕ تسجيل زيارة / موعد جديد"
-    ])
+    tab_v_list, tab_v_new = st.tabs(["📋 جدول الزيارات والمواعيد", "➕ تسجيل زيارة / موعد جديد"])
 
     with tab_v_list:
         cv1, cv2 = st.columns(2)
-        with cv1:
-            filter_v_type = st.selectbox("تصفية بحسب نوع الزيارة", ["الكل", "موعد مسبق", "زيارة فورية"])
-        with cv2:
-            filter_v_status = st.selectbox("تصفية بحسب الحالة", ["الكل", "قيد الانتظار", "جارية", "مكتملة", "ملغية"])
+        with cv1: filter_v_type = st.selectbox("نوع الزيارة", ["الكل", "موعد مسبق", "زيارة فورية"])
+        with cv2: filter_v_status = st.selectbox("الحالة", ["الكل", "قيد الانتظار", "جارية", "مكتملة", "ملغية"])
 
-        query_appts = """
-            SELECT 
-                id AS "رقم القيد",
-                visitor_name AS "اسم الزائر / الضيف",
-                visitor_phone AS "رقم الهاتف",
-                visit_type AS "نوع الزيارة",
-                visit_date AS "التاريخ",
-                visit_time AS "الوقت",
-                host_person AS "الشخص المطلوب مقابلته",
-                purpose AS "الغاية من الزيارة",
-                status AS "الحالة",
-                recorded_by AS "المسؤول عن التسجيل",
-                notes AS "ملاحظات"
-            FROM office_appointments
-            WHERE 1=1
-        """
-        if filter_v_type != "الكل":
-            query_appts += f" AND visit_type = '{filter_v_type}'"
-        if filter_v_status != "الكل":
-            query_appts += f" AND status = '{filter_v_status}'"
+        query_appts = "SELECT id AS \"رقم القيد\", visitor_name AS \"الاسم\", visitor_phone AS \"الهاتف\", visit_type AS \"النوع\", visit_date AS \"التاريخ\", visit_time AS \"الوقت\", host_person AS \"الشخص المطلوب\", purpose AS \"الغاية\", status AS \"الحالة\", recorded_by AS \"المسجل\", notes AS \"ملاحظات\" FROM office_appointments WHERE 1=1"
+        if filter_v_type != "الكل": query_appts += f" AND visit_type = '{filter_v_type}'"
+        if filter_v_status != "الكل": query_appts += f" AND status = '{filter_v_status}'"
         query_appts += " ORDER BY visit_date DESC, visit_time DESC;"
-
-        df_appts = pd.read_sql(query_appts, conn)
-        st.dataframe(df_appts, use_container_width=True)
+        st.dataframe(pd.read_sql(query_appts, conn), use_container_width=True)
 
     with tab_v_new:
         if user_role in ["Admin", "Secretary"]:
-            st.markdown("### ➕ إضافة حركة زيارة جديدة")
             with st.form("new_visit_form", clear_on_submit=True):
                 ca1, ca2 = st.columns(2)
                 with ca1:
@@ -624,25 +588,18 @@ elif menu == "📅 سجل المواعيد والزيارات":
                 with ca2:
                     v_time = st.time_input("وقت الزيارة", datetime.now().time())
                     v_host = st.selectbox("الشخص المطلوب مقابلته", ["المدير العام", "حمزة ديب", "مصعب المصري", "سامر ديب", "المحاسب", "آخر"])
-                    v_purpose = st.text_input("الغاية من الزيارة (مشروع، استفسار، توريد، توظيف...)")
+                    v_purpose = st.text_input("الغاية من الزيارة")
                     v_status = st.selectbox("الحالة", ["قيد الانتظار", "جارية", "مكتملة", "ملغية"])
                 v_notes = st.text_area("ملاحظات إضافية")
 
                 if st.form_submit_button("💾 حفظ وتثبيت الزيارة"):
-                    if not v_name.strip():
-                        st.error("يرجى إدخال اسم الزائر.")
-                    else:
+                    if v_name.strip():
                         cur = conn.cursor()
-                        cur.execute("""
-                            INSERT INTO office_appointments (visitor_name, visitor_phone, visit_type, visit_date, visit_time, host_person, purpose, status, notes, recorded_by)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
-                        """, (v_name.strip(), v_phone.strip(), v_type, v_date, v_time, v_host, v_purpose.strip(), v_status, v_notes.strip(), current_user['full_name']))
+                        cur.execute("INSERT INTO office_appointments (visitor_name, visitor_phone, visit_type, visit_date, visit_time, host_person, purpose, status, notes, recorded_by) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);", (v_name.strip(), v_phone.strip(), v_type, v_date, v_time, v_host, v_purpose.strip(), v_status, v_notes.strip(), current_user['full_name']))
                         conn.commit()
                         cur.close()
-                        st.success(f"تم تسجيل زيارة {v_name} بنجاح!")
+                        st.success("تم تسجيل الزيارة بنجاح!")
                         st.rerun()
-        else:
-            st.info("صلاحية إضافة الزيارات مخصصة للسكرتارية وإدارة النظام فقط.")
 
 # ====================================================
 # 4. جدول دوامات وساعات العمل
@@ -651,7 +608,6 @@ elif menu == "⏱️ جدول دوامات وساعات العمل":
     st.subheader("⏱️ متابعة وتسجيل حضور ودوام الموظفين")
     emps_df = pd.read_sql("SELECT id, name FROM stakeholders WHERE role IN ('Employee', 'Partner') ORDER BY name;", conn)
 
-    # السكرتيرة يُفتح لها تبويب التسجيل اليومي فقط دون الاطلاع على تقارير الساعات والغياب التراكمية
     if user_role == "Secretary":
         st.markdown("### ➕ تسجيل حضور / انصراف يومي لموظف")
         with st.form("secretary_att_form", clear_on_submit=True):
@@ -661,89 +617,46 @@ elif menu == "⏱️ جدول دوامات وساعات العمل":
                 att_date = st.date_input("تاريخ اليوم", datetime.now().date())
                 att_status = st.selectbox("حالة الدوام", ["حاضر", "متأخر", "غياب", "إجازة"])
             with ca2:
-                t_in = st.time_input("وقت الدخول / الحضور", time(9, 0))
-                t_out = st.time_input("وقت الخروج / الانصراف", time(17, 0))
+                t_in = st.time_input("الدخول", time(9, 0))
+                t_out = st.time_input("الانصراف", time(17, 0))
                 att_notes = st.text_input("ملاحظات")
-
             if st.form_submit_button("💾 تثبيت قيد الدوام اليومي"):
                 emp_id_val = int(emps_df.loc[emps_df['name'] == selected_emp_att, 'id'].values[0])
                 cur = conn.cursor()
                 duration = 8.0 if att_status in ["حاضر", "متأخر"] else 0.0
-                cur.execute("""
-                    INSERT INTO employee_attendance (employee_id, work_date, time_in, time_out, total_hours, status, notes)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (employee_id, work_date) DO UPDATE SET
-                        time_in = EXCLUDED.time_in, time_out = EXCLUDED.time_out,
-                        total_hours = EXCLUDED.total_hours, status = EXCLUDED.status, notes = EXCLUDED.notes;
-                """, (emp_id_val, att_date, t_in if att_status in ["حاضر", "متأخر"] else None, t_out if att_status in ["حاضر", "متأخر"] else None, duration, att_status, att_notes))
+                cur.execute("INSERT INTO employee_attendance (employee_id, work_date, time_in, time_out, total_hours, status, notes) VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT (employee_id, work_date) DO UPDATE SET time_in = EXCLUDED.time_in, time_out = EXCLUDED.time_out, total_hours = EXCLUDED.total_hours, status = EXCLUDED.status, notes = EXCLUDED.notes;", (emp_id_val, att_date, t_in if att_status in ["حاضر", "متأخر"] else None, t_out if att_status in ["حاضر", "متأخر"] else None, duration, att_status, att_notes))
                 conn.commit()
                 cur.close()
                 st.success(f"تم تسجيل دوام {selected_emp_att} بنجاح!")
     else:
-        # باقي الأدوار (المحاسب، المدير، الأدمن)
-        tab_att_log, tab_att_new, tab_att_rep = st.tabs([
-            "📋 سجل الدوام الشهري",
-            "➕ تسجيل حركة دوام",
-            "📊 ملخص ساعات العمل والغياب التراكمي"
-        ])
+        tab_att_log, tab_att_new, tab_att_rep = st.tabs(["📋 سجل الدوام الشهري", "➕ تسجيل حركة دوام", "📊 ملخص الساعات والغياب"])
         with tab_att_log:
-            query_att = """
-                SELECT a.id AS "المعرف", s.name AS "الموظف", a.work_date AS "التاريخ",
-                       a.time_in AS "وقت الحضور", a.time_out AS "وقت الانصراف", a.total_hours AS "ساعات العمل",
-                       a.overtime_hours AS "إضافي (ساعة)", a.status AS "الحالة", a.notes AS "ملاحظات"
-                FROM employee_attendance a JOIN stakeholders s ON a.employee_id = s.id ORDER BY a.work_date DESC;
-            """
-            st.dataframe(pd.read_sql(query_att, conn), use_container_width=True)
-
+            st.dataframe(pd.read_sql("SELECT a.id AS \"المعرف\", s.name AS \"الموظف\", a.work_date AS \"التاريخ\", a.time_in AS \"الحضور\", a.time_out AS \"الانصراف\", a.total_hours AS \"الساعات\", a.status AS \"الحالة\" FROM employee_attendance a JOIN stakeholders s ON a.employee_id = s.id ORDER BY a.work_date DESC;", conn), use_container_width=True)
         with tab_att_new:
             if user_role in ["Admin", "Accountant"]:
                 with st.form("admin_att_form", clear_on_submit=True):
-                    ca1, ca2, ca3 = st.columns(3)
+                    ca1, ca2 = st.columns(2)
                     with ca1:
                         selected_emp_att = st.selectbox("الموظف", emps_df['name'].tolist())
-                        att_date = st.date_input("تاريخ اليوم", datetime.now().date())
+                        att_date = st.date_input("التاريخ", datetime.now().date())
                         att_status = st.selectbox("الحالة", ["حاضر", "متأخر", "غياب", "إجازة"])
                     with ca2:
                         t_in = st.time_input("الدخول", time(9, 0))
                         t_out = st.time_input("الانصراف", time(17, 0))
-                        std_hours = st.number_input("الدوام النظامي", value=8.0)
-                    with ca3:
-                        datetime_in = datetime.combine(datetime.today(), t_in)
-                        datetime_out = datetime.combine(datetime.today(), t_out)
-                        dur = (datetime_out - datetime_in).total_seconds() / 3600.0 if datetime_out >= datetime_in else 0.0
-                        calc_h = dur if att_status in ["حاضر", "متأخر"] else 0.0
-                        calc_ot = max(0.0, calc_h - std_hours)
-                        st.markdown(f"**العمل:** {calc_h:.2f} س | **إضافي:** {calc_ot:.2f} س")
-                        notes = st.text_area("ملاحظات")
+                        notes = st.text_input("ملاحظات")
                     if st.form_submit_button("💾 حفظ"):
                         emp_id_val = int(emps_df.loc[emps_df['name'] == selected_emp_att, 'id'].values[0])
                         cur = conn.cursor()
-                        cur.execute("""
-                            INSERT INTO employee_attendance (employee_id, work_date, time_in, time_out, total_hours, status, overtime_hours, notes)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                            ON CONFLICT (employee_id, work_date) DO UPDATE SET
-                                time_in = EXCLUDED.time_in, time_out = EXCLUDED.time_out, total_hours = EXCLUDED.total_hours,
-                                status = EXCLUDED.status, overtime_hours = EXCLUDED.overtime_hours, notes = EXCLUDED.notes;
-                        """, (emp_id_val, att_date, t_in if att_status in ["حاضر", "متأخر"] else None, t_out if att_status in ["حاضر", "متأخر"] else None, calc_h, att_status, calc_ot, notes))
+                        cur.execute("INSERT INTO employee_attendance (employee_id, work_date, time_in, time_out, total_hours, status, notes) VALUES (%s, %s, %s, %s, 8.0, %s, %s) ON CONFLICT (employee_id, work_date) DO UPDATE SET time_in = EXCLUDED.time_in, time_out = EXCLUDED.time_out, status = EXCLUDED.status, notes = EXCLUDED.notes;", (emp_id_val, att_date, t_in, t_out, att_status, notes))
                         conn.commit()
                         cur.close()
-                        st.success("تم الحفظ بنجاح!")
+                        st.success("تم الحفظ!")
                         st.rerun()
-            else:
-                st.info("صلاحية القراءة فقط مفعلة لحساب المدير العام.")
-
         with tab_att_rep:
-            query_rep = """
-                SELECT s.name AS "الموظف", COUNT(CASE WHEN a.status = 'حاضر' THEN 1 END) AS "أيام الحضور",
-                       COUNT(CASE WHEN a.status = 'غياب' THEN 1 END) AS "أيام الغياب",
-                       COALESCE(SUM(a.total_hours), 0) AS "إجمالي الساعات", COALESCE(SUM(a.overtime_hours), 0) AS "ساعات الإضافي"
-                FROM stakeholders s LEFT JOIN employee_attendance a ON s.id = a.employee_id
-                WHERE s.role IN ('Employee', 'Partner') GROUP BY s.id, s.name;
-            """
-            st.dataframe(pd.read_sql(query_rep, conn), use_container_width=True)
+            st.dataframe(pd.read_sql("SELECT s.name AS \"الموظف\", COUNT(CASE WHEN a.status = 'حاضر' THEN 1 END) AS \"أيام الحضور\", COUNT(CASE WHEN a.status = 'غياب' THEN 1 END) AS \"أيام الغياب\", COALESCE(SUM(a.total_hours), 0) AS \"إجمالي الساعات\" FROM stakeholders s LEFT JOIN employee_attendance a ON s.id = a.employee_id WHERE s.role IN ('Employee', 'Partner') GROUP BY s.id, s.name;", conn), use_container_width=True)
 
 # ====================================================
-# 5. كشف حساب الموظف الذاتي (للموظفين فقط)
+# 5. كشف حساب الموظف الذاتي
 # ====================================================
 elif menu == "👤 كشف حسابي ودوامي الذاتي":
     st.subheader(f"👤 كشف الدوام والراتب الشخصي: {current_user['full_name']}")
@@ -751,12 +664,10 @@ elif menu == "👤 كشف حسابي ودوامي الذاتي":
     if not emp_s_id:
         st.info("لم يتم ربط هذا الحساب بملف موظف محدد.")
     else:
-        q_my_att = f"SELECT work_date AS \"التاريخ\", time_in AS \"الحضور\", time_out AS \"الانصراف\", total_hours AS \"الساعات\", status AS \"الحالة\" FROM employee_attendance WHERE employee_id = {emp_s_id} ORDER BY work_date DESC;"
-        st.markdown("#### ⏱️ سجل دوامك خلال الشهر")
-        st.dataframe(pd.read_sql(q_my_att, conn), use_container_width=True)
-        q_my_pay = f"SELECT payroll_month AS \"الشهر\", base_salary AS \"الأساسي\", overtime_amount AS \"الإضافي\", deductions AS \"الخصومات\", net_salary AS \"صافي الراتب\", currency AS \"العملة\", payment_status AS \"الحالة\" FROM payroll_records WHERE employee_id = {emp_s_id} ORDER BY payroll_month DESC;"
+        st.markdown("#### ⏱️ سجل دوامك الشخصي")
+        st.dataframe(pd.read_sql(f"SELECT work_date AS \"التاريخ\", time_in AS \"الحضور\", time_out AS \"الانصراف\", total_hours AS \"الساعات\", status AS \"الحالة\" FROM employee_attendance WHERE employee_id = {emp_s_id} ORDER BY work_date DESC;", conn), use_container_width=True)
         st.markdown("#### 💳 مسيرات الرواتب والمستحقات")
-        st.dataframe(pd.read_sql(q_my_pay, conn), use_container_width=True)
+        st.dataframe(pd.read_sql(f"SELECT payroll_month AS \"الشهر\", base_salary AS \"الأساسي\", overtime_amount AS \"الإضافي\", deductions AS \"الخصومات\", net_salary AS \"صافي الراتب\", currency AS \"العملة\", payment_status AS \"الحالة\" FROM payroll_records WHERE employee_id = {emp_s_id} ORDER BY payroll_month DESC;", conn), use_container_width=True)
 
 # ====================================================
 # 6. كشوفات حسابات المستثمرين
@@ -796,11 +707,9 @@ elif menu == "📑 كشوفات حسابات المستثمرين":
 
         df_inv_tx = pd.read_sql(f"SELECT id AS \"رقم الفاتورة\", tx_date AS \"التاريخ\", tx_type AS \"نوع الحركة\", amount AS \"المبلغ\", currency AS \"العملة\", amount_usd AS \"المعادل $\", description AS \"البيان\" FROM transactions WHERE project_id = {proj_id} ORDER BY tx_date DESC;", conn)
         st.dataframe(df_inv_tx, use_container_width=True)
-    else:
-        st.info("لا توجد مشاريع.")
 
 # ====================================================
-# 7. التحويل والصرافة بين الصناديق
+# 7. التحويل والصرافة
 # ====================================================
 elif menu == "💱 التحويل بين الخزائن والصرافة":
     st.subheader("💱 التحويل المالي والصرافة بين الصناديق")
@@ -820,7 +729,7 @@ elif menu == "💱 التحويل بين الخزائن والصرافة":
                 rate = st.number_input("سعر الصرف", min_value=1.0, value=131.0)
             with ct3:
                 calc_res = s_amt * rate if "من دولار" in tx_dir else (s_amt / rate if rate > 0 else 0)
-                st.markdown(f"**المبلغ المستلم المقابل:** {calc_res:,.2f}")
+                st.markdown(f"**المبلغ المقابل:** {calc_res:,.2f}")
                 notes = st.text_input("ملاحظات / الصراف", value="صرافة داخلية")
             if st.form_submit_button("🚀 اعتماد التحويل"):
                 from_c = "USD" if "من دولار" in tx_dir else "SYP"
@@ -838,10 +747,6 @@ elif menu == "💱 التحويل بين الخزائن والصرافة":
                     cur.close()
                     st.success("تم ترحيل الصرافة!")
                     st.rerun()
-                else:
-                    st.error("المبلغ غير متوفر في الخزينة.")
-    else:
-        st.info("المدير العام يمتلك صلاحية الاطلاع فقط على عمليات الصرافة.")
 
 # ====================================================
 # 8. طباعة السندات وتصدير التقارير
@@ -911,7 +816,7 @@ elif menu == "💳 مسيرات الرواتب الشهرية":
                 st.rerun()
 
 # ====================================================
-# 10. إدارة المخزون ومواد المشاريع
+# 10. المخزون ومواد المشاريع
 # ====================================================
 elif menu == "📦 إدارة المخزون ومواد المشاريع":
     st.subheader("📦 مستودع ومخزون مواد الشركة")
@@ -940,7 +845,7 @@ elif menu == "📦 إدارة المخزون ومواد المشاريع":
                         st.rerun()
 
 # ====================================================
-# 11. دليل وتعديل بيانات الأطراف (الجهات الخارجية)
+# 11. دليل الأطراف (الجهات الخارجية)
 # ====================================================
 elif menu == "👥 دليل وتعديل بيانات الأطراف":
     st.subheader("👥 دليل كافة الأطراف والجهات الخارجية")
@@ -972,7 +877,7 @@ elif menu == "📑 دفتر الحركات وسجل الفواتير":
     st.dataframe(df_all_tx, use_container_width=True)
 
 # ====================================================
-# 13. إضافة فاتورة وحركة متعددة البنود
+# 13. إضافة حركة مالية وفاتورة
 # ====================================================
 elif menu == "➕ إضافة فاتورة وحركة متعددة البنود":
     if user_role in ["Admin", "Accountant"]:
@@ -1057,28 +962,139 @@ elif menu == "🏢 حسابات المشاريع والمستثمرين":
     st.dataframe(pd.read_sql(q_calc, conn), use_container_width=True)
 
 # ====================================================
-# 16. الإدارة والتشغيل والتعاقدات (Admin فقط)
+# 16. الإدارة والتشغيل والتعاقدات (لوحة تحكم المستخدمين وكلمات السر الكاملة للأدمن)
 # ====================================================
 elif menu == "⚙️ الإدارة والتشغيل والتعاقدات":
     if user_role == "Admin":
-        st.subheader("⚙️ لوحة إدارة المشاريع والموظفين وتعيين الصلاحيات")
-        st.dataframe(pd.read_sql("SELECT id, username, full_name, role FROM app_users;", conn), use_container_width=True)
-        st.markdown("#### ➕ إضافة حساب مستخدم جديد لمنظومة العمل")
-        with st.form("new_app_user_form", clear_on_submit=True):
-            cu1, cu2 = st.columns(2)
-            with cu1:
-                u_name = st.text_input("اسم الدخول (Username)")
-                u_pass = st.text_input("كلمة المرور (Password)", type="password")
-            with cu2:
-                u_full = st.text_input("الاسم الكامل للمستخدم")
-                u_r = st.selectbox("الدور والصلاحية", ["Manager", "Accountant", "Secretary", "Partner", "Employee"])
-            if st.form_submit_button("🚀 تفعيل حساب المستخدم"):
-                if u_name.strip() and u_pass.strip():
+        st.subheader("⚙️ لوحة تحكم الإدارة العليا (المستخدمين وكلمات المرور والصلاحيات)")
+
+        tab_users_mgmt, tab_org_ops = st.tabs([
+            "🔐 إدارة الحسابات وكلمات السر والصلاحيات",
+            "🏗️ إدارة المشاريع والمستثمرين"
+        ])
+
+        with tab_users_mgmt:
+            st.markdown("### 📋 سجل المستخدمين وكلمات السر الحالية")
+            st.caption("كشف كامل بالحسابات وكلمات السر لإدارتها عند النسيان أو تعديل الصلاحيات:")
+            
+            query_users_full = """
+                SELECT 
+                    id AS "المعرف",
+                    username AS "اسم الدخول",
+                    password AS "كلمة المرور 🔑",
+                    full_name AS "الاسم الكامل",
+                    role AS "الصلاحية الممنوحة",
+                    CASE WHEN is_active THEN 'نشط 🟢' ELSE 'مجمد 🛑' END AS "حالة الحساب",
+                    created_at::date AS "تاريخ الإنشاء"
+                FROM app_users
+                ORDER BY id ASC;
+            """
+            df_users_full = pd.read_sql(query_users_full, conn)
+            st.dataframe(df_users_full, use_container_width=True)
+
+            st.markdown("---")
+            col_u_edit, col_u_add = st.columns(2)
+
+            with col_u_edit:
+                st.markdown("#### ✏️ تعديل حساب / تغيير كلمة سر / تجميد / صلاحية")
+                all_usernames = df_users_full["اسم الدخول"].tolist()
+                sel_user = st.selectbox("اختر الحساب المطلوب تعديله:", all_usernames)
+
+                if sel_user:
                     cur = conn.cursor()
-                    cur.execute("INSERT INTO app_users (username, password, full_name, role) VALUES (%s, %s, %s, %s);", (u_name.strip(), u_pass.strip(), u_full.strip(), u_r))
-                    conn.commit()
+                    cur.execute("SELECT id, username, password, full_name, role, is_active FROM app_users WHERE username = %s;", (sel_user,))
+                    u_rec = cur.fetchone()
                     cur.close()
-                    st.success(f"تم إنشاء حساب للمستخدم {u_full} بصلاحية {u_r}!")
-                    st.rerun()
+
+                    u_id, u_usr, u_pwd, u_fn, u_rl, u_act = u_rec
+                    roles_list = ["Admin", "Manager", "Accountant", "Secretary", "Partner", "Employee"]
+                    rl_idx = roles_list.index(u_rl) if u_rl in roles_list else 0
+
+                    with st.form("edit_user_credentials_form"):
+                        new_u_fn = st.text_input("الاسم الكامل", value=u_fn)
+                        new_u_pwd = st.text_input("كلمة المرور الجديدة", value=u_pwd)
+                        new_u_rl = st.selectbox("تعديل الصلاحية", roles_list, index=rl_idx)
+                        new_u_act = st.selectbox("حالة الحساب", ["نشط", "تجميد الحساب"], index=0 if u_act else 1)
+
+                        save_user_changes = st.form_submit_button("💾 حفظ تعديلات الحساب فوراً")
+                        if save_user_changes:
+                            cur = conn.cursor()
+                            is_active_val = True if new_u_act == "نشط" else False
+                            cur.execute("""
+                                UPDATE app_users
+                                SET full_name = %s, password = %s, role = %s, is_active = %s
+                                WHERE id = %s;
+                            """, (new_u_fn.strip(), new_u_pwd.strip(), new_u_rl, is_active_val, u_id))
+                            conn.commit()
+                            cur.close()
+                            st.success(f"تم تحديث بيانات الحساب '{sel_user}' بنجاح!")
+                            st.rerun()
+
+                    if sel_user not in ["hamza", "mosab"]:
+                        if st.button(f"🗑️ حذف حساب {sel_user} نهائياً", key="del_user_btn"):
+                            cur = conn.cursor()
+                            cur.execute("DELETE FROM app_users WHERE id = %s;", (u_id,))
+                            conn.commit()
+                            cur.close()
+                            st.success(f"تم حذف الحساب {sel_user} نهائياً.")
+                            st.rerun()
+
+            with col_u_add:
+                st.markdown("#### ➕ إنشاء حساب جديد")
+                with st.form("add_new_app_user_form", clear_on_submit=True):
+                    add_usr = st.text_input("اسم الدخول الجديد (Username)")
+                    add_pwd = st.text_input("كلمة المرور (Password)")
+                    add_fn = st.text_input("الاسم الكامل للمستخدم")
+                    add_rl = st.selectbox("تحديد الدور والصلاحية", ["Manager", "Accountant", "Secretary", "Partner", "Employee", "Admin"])
+                    
+                    if st.form_submit_button("🚀 تفعيل وإنشاء الحساب"):
+                        if add_usr.strip() and add_pwd.strip():
+                            cur = conn.cursor()
+                            try:
+                                cur.execute("""
+                                    INSERT INTO app_users (username, password, full_name, role, is_active)
+                                    VALUES (%s, %s, %s, %s, TRUE);
+                                """, (add_usr.strip(), add_pwd.strip(), add_fn.strip(), add_rl))
+                                conn.commit()
+                                st.success(f"تم إنشاء حساب '{add_usr}' بنجاح!")
+                                st.rerun()
+                            except Exception as e:
+                                conn.rollback()
+                                st.error(f"اسم المستخدم مستخدم مسبقاً أو حدث خطأ: {e}")
+                            finally:
+                                cur.close()
+                        else:
+                            st.error("يرجى ملء اسم الدخول وكلمة المرور.")
+
+        with tab_org_ops:
+            st.markdown("### 🏗️ إدارة المشاريع والمستثمرين")
+            c_p1, c_p2 = st.columns(2)
+            with c_p1:
+                st.markdown("#### ➕ إنشاء مشروع جديد")
+                with st.form("add_proj_quick", clear_on_submit=True):
+                    p_name_n = st.text_input("اسم المشروع")
+                    p_type_n = st.selectbox("النوع", ["Finishing", "Development", "Internal"])
+                    p_fee_n = st.number_input("أتعاب الإدارة %", min_value=0.0, value=15.0)
+                    if st.form_submit_button("فتح المشروع"):
+                        if p_name_n.strip():
+                            cur = conn.cursor()
+                            cur.execute("INSERT INTO projects (name, project_type, management_fee_rate, status) VALUES (%s, %s, %s, 'Active') ON CONFLICT (name) DO NOTHING;", (p_name_n.strip(), p_type_n, p_fee_n / 100.0))
+                            conn.commit()
+                            cur.close()
+                            st.success("تم إنشاء المشروع!")
+                            st.rerun()
+            with c_p2:
+                st.markdown("#### ➕ تسجيل مستثمر جديد")
+                with st.form("add_inv_quick", clear_on_submit=True):
+                    inv_n = st.text_input("اسم المستثمر")
+                    inv_ph = st.text_input("رقم الهاتف")
+                    if st.form_submit_button("تسجيل المستثمر"):
+                        if inv_n.strip():
+                            cur = conn.cursor()
+                            cur.execute("INSERT INTO stakeholders (name, role, phone, status) VALUES (%s, 'Investor', %s, 'نشط') ON CONFLICT (name) DO UPDATE SET role = 'Investor', status = 'نشط';", (inv_n.strip(), inv_ph.strip()))
+                            conn.commit()
+                            cur.close()
+                            st.success("تم تسجيل المستثمر!")
+                            st.rerun()
 
 conn.close()
