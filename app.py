@@ -225,7 +225,7 @@ def generate_receipt_pdf(tx_data, items_data):
     buffer.seek(0)
     return buffer.getvalue()
 
-# 3. الهوية البصرية وضبط الجداول وتوسيع حقول العرض لتكون واضحة
+# 3. الهوية البصرية وضبط الجداول لعرض التواريخ والبيانات الإنجليزية بوضوح تام
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
@@ -244,13 +244,13 @@ st.markdown("""
         text-align: right !important;
     }
 
-    /* تحسين عرض النصوص في الجداول ومنع تداخلها */
+    /* ضمان ظهور محتوى خلايا الجداول والتواريخ والأرقام بوضوح تام */
     [data-testid="stDataFrame"] {
         direction: ltr !important;
-        text-align: right !important;
+        text-align: left !important;
     }
-    [data-testid="stDataFrame"] div {
-        direction: rtl !important;
+    [data-testid="stDataFrame"] table {
+        width: 100% !important;
     }
     
     [data-testid="stToolbar"],
@@ -853,8 +853,8 @@ elif menu == "📑 كشوفات حسابات المستثمرين":
 elif menu == "💱 التحويل بين الخزائن والصرافة":
     st.subheader("💱 التحويل المالي والصرافة بين الصناديق")
     df_v_bal = pd.read_sql("SELECT v.id, v.currency, COALESCE(SUM(CASE WHEN t.direction = 'IN' THEN t.amount ELSE -t.amount END), 0) AS balance FROM vaults v LEFT JOIN transactions t ON v.id = t.vault_id GROUP BY v.id, v.currency;", conn)
-    usd_available = df_v_bal.loc[df_v_bal['currency'] == 'USD', 'current_balance'].values[0] if not df_v_bal.empty else 0.0
-    syp_available = df_v_bal.loc[df_v_bal['currency'] == 'SYP', 'current_balance'].values[0] if not df_v_bal.empty else 0.0
+    usd_available = df_v_bal.loc[df_v_bal['currency'] == 'USD', 'balance'].values[0] if not df_v_bal.empty else 0.0
+    syp_available = df_v_bal.loc[df_v_bal['currency'] == 'SYP', 'balance'].values[0] if not df_v_bal.empty else 0.0
 
     st.info(f"💵 الرصيد المتاح بالدولار: **{usd_available:,.2f} $** | 🪙 الرصيد المتاح بالليرة: **{syp_available:,.0f} ل.س**")
     if user_role in ["Admin", "Accountant"]:
