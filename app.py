@@ -18,7 +18,8 @@ logo_filename = "MA Logo.png" if os.path.exists("MA Logo.png") else ("Mosab/MA L
 st.set_page_config(
     page_title="شركة MA العقارية | منظومة الإدارة والرقابة المالية",
     page_icon=logo_filename if logo_filename else "🏛️",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 # 2. بيانات الاتصال بقاعدة البيانات السحابية Supabase
@@ -93,7 +94,7 @@ def ensure_database_schema():
 
 ensure_database_schema()
 
-# سكريبت متقدم لإخفاء زر Manage app وعناصر التحكم
+# سكريبت إخفاء أزرار المطور في Streamlit
 st.components.v1.html("""
 <script>
 function cleanStreamlitUI() {
@@ -225,13 +226,13 @@ def generate_receipt_pdf(tx_data, items_data):
     buffer.seek(0)
     return buffer.getvalue()
 
-# 3. الهوية البصرية وضبط شريط السايد بار بكامل الارتفاع
+# 3. الهوية البصرية وتثبيت زر فتح السايد بار في منتصف يسار الشاشة
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
     * { font-family: 'Cairo', sans-serif !important; }
     
-    /* 1. إخفاء شريط أدوات ستريم ليت المطور وزر Manage app بالكامل */
+    /* إخفاء شريط أدوات ستريم ليت المطور وزر Manage app بالكامل */
     [data-testid="stToolbar"],
     .stAppDeployButton,
     #MainMenu,
@@ -246,86 +247,61 @@ st.markdown("""
         pointer-events: none !important;
     }
 
-    /* 2. إبقاء الهيدر شفافاً */
     header[data-testid="stHeader"] {
         background: transparent !important;
     }
 
-    /* 3. زر السايد بار على كامل ارتفاع الشاشة (100vh) من أعلى الصفحة لأسفلها */
+    /* زر إظهار السايد بار: مثبت في منتصف الطرف الأيسر تماماً */
     [data-testid="collapsedControl"] {
         display: flex !important;
         visibility: visible !important;
         opacity: 1 !important;
         position: fixed !important;
-        top: 0 !important;
-        bottom: 0 !important;
-        height: 100vh !important;
-        width: 34px !important;
-        right: 0 !important;
-        left: auto !important;
+        top: 50% !important;
+        left: 0 !important;
+        right: auto !important;
+        transform: translateY(-50%) !important;
         z-index: 999999 !important;
         margin: 0 !important;
         padding: 0 !important;
-        background: transparent !important;
     }
 
     [data-testid="collapsedControl"] button {
-        height: 100vh !important;
-        width: 34px !important;
-        border-radius: 0 !important;
+        height: 120px !important;
+        width: 38px !important;
+        border-radius: 0 12px 12px 0 !important;
         background-color: #0F4733 !important;
-        border: none !important;
-        border-left: 2.5px solid #BE9D5F !important;
-        border-right: none !important;
+        border: 2px solid #BE9D5F !important;
+        border-left: none !important;
         display: flex !important;
         flex-direction: column !important;
         align-items: center !important;
         justify-content: center !important;
-        gap: 14px !important;
         cursor: pointer !important;
-        transition: all 0.25s ease-in-out !important;
-        box-shadow: -3px 0 14px rgba(15, 71, 51, 0.35) !important;
-        padding: 0 !important;
+        box-shadow: 4px 0 18px rgba(15, 71, 51, 0.45) !important;
+        padding: 4px !important;
+        transition: all 0.2s ease !important;
     }
 
     [data-testid="collapsedControl"] button:hover {
         background-color: #BE9D5F !important;
-        border-left: 2.5px solid #0F4733 !important;
-        width: 40px !important;
+        border-color: #0F4733 !important;
+        width: 44px !important;
     }
 
     [data-testid="collapsedControl"] button svg {
         fill: #FFFFFF !important;
         stroke: #FFFFFF !important;
-        width: 22px !important;
-        height: 22px !important;
-        transition: all 0.2s ease !important;
+        width: 24px !important;
+        height: 24px !important;
     }
 
     [data-testid="collapsedControl"] button:hover svg {
         fill: #0F4733 !important;
         stroke: #0F4733 !important;
-        transform: scale(1.25) !important;
     }
 
-    /* كتابة 'القائمة الرئيسية' طولياً على امتداد الشريط */
-    [data-testid="collapsedControl"] button::after {
-        content: "القائمة الرئيسية";
-        writing-mode: vertical-rl;
-        text-orientation: mixed;
-        color: #FFFFFF;
-        font-weight: 800;
-        font-size: 13px;
-        letter-spacing: 4px;
-        transition: all 0.2s ease !important;
-    }
-
-    [data-testid="collapsedControl"] button:hover::after {
-        color: #0F4733;
-        font-weight: 900;
-    }
-
-    /* 4. زر إغلاق السايد بار من الداخل */
+    /* زر إغلاق السايد بار من الداخل */
     button[data-testid="stSidebarCollapseButton"] {
         background-color: rgba(190, 157, 95, 0.2) !important;
         border: 1px solid #BE9D5F !important;
@@ -336,13 +312,22 @@ st.markdown("""
     }
 
     [data-testid="stIconMaterial"], .material-symbols-rounded, button[data-testid="stSidebarCollapseButton"] *, button[data-testid="collapsedControl"] * { font-family: 'Material Symbols Rounded' !important; }
-    .block-container { direction: rtl !important; text-align: right !important; padding-top: 3.5rem !important; padding-bottom: 3rem !important; }
+    .block-container { direction: rtl !important; text-align: right !important; padding-top: 2rem !important; padding-bottom: 3rem !important; }
     .stApp { background-color: #F9F9F8 !important; }
     
-    section[data-testid="stSidebar"] { background-color: #0F4733 !important; border: none !important; direction: rtl !important; text-align: right !important; }
-    section[data-testid="stSidebar"][aria-expanded="true"] { border-left: 2px solid #BE9D5F !important; }
-    section[data-testid="stSidebar"][aria-expanded="false"] { border: none !important; }
-    section[data-testid="stSidebar"] * { color: #FFFFFF !important; }
+    /* ضبط السايد بار بالكامل */
+    section[data-testid="stSidebar"] { 
+        background-color: #0F4733 !important; 
+        border: none !important; 
+        direction: rtl !important; 
+        text-align: right !important; 
+    }
+    section[data-testid="stSidebar"][aria-expanded="true"] { 
+        border-left: 2px solid #BE9D5F !important; 
+    }
+    section[data-testid="stSidebar"] * { 
+        color: #FFFFFF !important; 
+    }
     
     .metric-card { background: #FFFFFF; border-radius: 12px; padding: 18px 20px; border: 1px solid #E2E1DE; border-right: 6px solid #0F4733; box-shadow: 0 4px 15px rgba(15, 71, 51, 0.05); margin-bottom: 18px; direction: rtl; text-align: right; }
     .metric-title { color: #A29F98; font-size: 0.95rem; font-weight: 700; margin-bottom: 6px; }
