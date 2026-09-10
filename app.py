@@ -13,9 +13,11 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
 # 1. إعدادات الصفحة الأساسية
+logo_filename = "MA Logo.png" if os.path.exists("MA Logo.png") else ("Mosab/MA Logo.png" if os.path.exists("Mosab/MA Logo.png") else None)
+
 st.set_page_config(
     page_title="MA Real Estate | منظومة الإدارة والرقابة المالية",
-    page_icon="Mosab/MA Logo.png" if os.path.exists("Mosab/MA Logo.png") else "🏛️",
+    page_icon=logo_filename if logo_filename else "🏛️",
     layout="wide"
 )
 
@@ -36,12 +38,12 @@ def get_connection():
     )
 
 def get_base64_image(image_path):
-    if os.path.exists(image_path):
+    if image_path and os.path.exists(image_path):
         with open(image_path, "rb") as img_file:
             return base64.b64encode(img_file.read()).decode()
     return None
 
-logo_b64 = get_base64_image("Mosab/MA Logo.png")
+logo_b64 = get_base64_image(logo_filename)
 
 def to_excel_download_link(df, filename):
     output = io.BytesIO()
@@ -194,21 +196,14 @@ st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
     
-    body, p, span:not([data-testid="stIconMaterial"]), label, h1, h2, h3, h4, h5, input, select, textarea, button, .stMarkdown {
+    html, body, [class*="css"], .stMarkdown, p, span, label, h1, h2, h3, h4, h5, button, input, select, textarea {
         font-family: 'Cairo', sans-serif !important;
-    }
-
-    [data-testid="stIconMaterial"], .material-symbols-rounded {
-        font-family: 'Material Symbols Rounded' !important;
-    }
-
-    .block-container {
         direction: rtl !important;
         text-align: right !important;
     }
 
     .stApp {
-        background-color: #F9F9F8;
+        background-color: #F9F9F8 !important;
     }
 
     .stDeployButton, footer, #MainMenu {
@@ -223,10 +218,6 @@ st.markdown("""
         border-radius: 8px !important;
         margin: 5px !important;
     }
-    button[data-testid="stSidebarCollapseButton"] svg,
-    button[data-testid="collapsedControl"] svg {
-        fill: currentColor !important;
-    }
 
     section[data-testid="stSidebar"] {
         background-color: #0F4733 !important;
@@ -234,18 +225,6 @@ st.markdown("""
     }
     section[data-testid="stSidebar"] * {
         color: #FFFFFF !important;
-    }
-    section[data-testid="stSidebar"] p, 
-    section[data-testid="stSidebar"] span, 
-    section[data-testid="stSidebar"] label {
-        font-size: 1.05rem;
-        font-weight: 600;
-    }
-
-    section[data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label:hover {
-        background-color: rgba(190, 157, 95, 0.2) !important;
-        color: #BE9D5F !important;
-        border-radius: 8px;
     }
 
     input, textarea, select, div[data-baseweb="select"] > div {
@@ -255,47 +234,33 @@ st.markdown("""
         border-radius: 8px !important;
         font-weight: 600 !important;
     }
-    div[data-baseweb="select"] * {
-        color: #44494B !important;
-        background-color: #FFFFFF !important;
-    }
 
     .metric-card {
         background: #FFFFFF;
-        border-radius: 14px;
-        padding: 22px 26px;
+        border-radius: 12px;
+        padding: 18px 20px;
         border: 1px solid #E2E1DE;
-        border-right: 7px solid #0F4733;
+        border-right: 6px solid #0F4733;
         box-shadow: 0 4px 15px rgba(15, 71, 51, 0.05);
-        margin-bottom: 20px;
+        margin-bottom: 18px;
         direction: rtl;
         text-align: right;
     }
     .metric-title {
         color: #A29F98;
-        font-size: 1rem;
+        font-size: 0.95rem;
         font-weight: 700;
-        margin-bottom: 8px;
+        margin-bottom: 6px;
     }
     .metric-value-usd {
         color: #0F4733;
-        font-size: 2.2rem;
+        font-size: 2rem;
         font-weight: 900;
     }
     .metric-value-gold {
         color: #BE9D5F;
-        font-size: 2.2rem;
+        font-size: 2rem;
         font-weight: 900;
-    }
-
-    .brand-header-box {
-        display: flex;
-        align-items: center;
-        gap: 20px;
-        border-bottom: 2px solid #BE9D5F;
-        padding-bottom: 16px;
-        margin-bottom: 25px;
-        direction: rtl;
     }
 
     .stButton > button, .stDownloadButton > button {
@@ -303,10 +268,9 @@ st.markdown("""
         color: #FFFFFF !important;
         border: 1.5px solid #BE9D5F !important;
         border-radius: 8px !important;
-        padding: 10px 28px !important;
+        padding: 8px 24px !important;
         font-weight: 800 !important;
         box-shadow: 0 4px 12px rgba(15, 71, 51, 0.15);
-        transition: all 0.3s ease;
     }
     .stButton > button:hover, .stDownloadButton > button:hover {
         background-color: #BE9D5F !important;
@@ -317,7 +281,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ----------------------------------------------------
-# بوابة تسجيل الدخول والأمان (Authentication Gateway)
+# بوابة تسجيل الدخول والأمان
 # ----------------------------------------------------
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
@@ -326,6 +290,25 @@ if "authenticated" not in st.session_state:
 def login_user(username, password):
     conn = get_connection()
     cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS app_users (
+            id SERIAL PRIMARY KEY,
+            username VARCHAR(100) UNIQUE NOT NULL,
+            password VARCHAR(255) NOT NULL,
+            full_name VARCHAR(255) NOT NULL,
+            role VARCHAR(50) NOT NULL,
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        INSERT INTO app_users (username, password, full_name, role)
+        VALUES 
+            ('hamza', 'hamza123', 'حمزة ديب', 'Admin'),
+            ('mosab', 'mosab123', 'مصعب المصري', 'Admin'),
+            ('samer', 'samer123', 'سامر ديب', 'Admin'),
+            ('accountant', 'acc123', 'محاسب الشركة', 'Accountant')
+        ON CONFLICT (username) DO NOTHING;
+    """)
+    conn.commit()
     cur.execute("SELECT id, username, full_name, role FROM app_users WHERE username = %s AND password = %s AND is_active = TRUE;", (username.strip(), password.strip()))
     user = cur.fetchone()
     cur.close()
@@ -337,11 +320,7 @@ if not st.session_state.authenticated:
     c_log1, c_log2, c_log3 = st.columns([1, 1.5, 1])
     with c_log2:
         if logo_b64:
-            st.markdown(f"""
-                <div style="text-align: center; margin-bottom: 15px;">
-                    <img src="data:image/png;base64,{logo_b64}" style="width: 140px;">
-                </div>
-            """, unsafe_allow_html=True)
+            st.markdown(f'<div style="text-align: center; margin-bottom: 15px;"><img src="data:image/png;base64,{logo_b64}" style="width: 140px;"></div>', unsafe_allow_html=True)
         st.markdown("""
             <div style="text-align: center; margin-bottom: 25px;">
                 <h2 style="color: #0F4733; margin: 0;">منظومة الإدارة والرقابة المالية</h2>
@@ -374,22 +353,21 @@ if not st.session_state.authenticated:
     st.stop()
 
 # ----------------------------------------------------
-# المستخدم الحالي والصلاحيات
+# المستخدم الحالي وصلاحياته
 # ----------------------------------------------------
 current_user = st.session_state.user_info
 user_role = current_user['role']
 
-# تحديد القوائم المتاحة بحسب الصلاحية
 if user_role == "Admin":
     allowed_menus = [
         "📊 لوحة المؤشرات العامة والأرصدة",
+        "🤝 هيكل الشركاء ورأس المال والأرباح",
         "📑 كشوفات حسابات المستثمرين",
         "💱 التحويل بين الخزائن والصرافة",
         "🖨️ طباعة السندات وتصدير التقارير",
         "💳 مسيرات الرواتب الشهرية",
         "⏱️ جدول دوامات وساعات العمل",
         "📦 إدارة المخزون ومواد المشاريع",
-        "🤝 هيكل الشركاء ورأس المال والأرباح",
         "👥 دليل وتعديل بيانات الأطراف",
         "📑 دفتر الحركات وسجل الفواتير",
         "➕ إضافة فاتورة وحركة متعددة البنود",
@@ -397,7 +375,7 @@ if user_role == "Admin":
         "🏢 حسابات المشاريع والمستثمرين",
         "⚙️ الإدارة والتشغيل والتعاقدات"
     ]
-else: # Accountant
+else:
     allowed_menus = [
         "📊 لوحة المؤشرات العامة والأرصدة",
         "📑 كشوفات حسابات المستثمرين",
@@ -412,40 +390,39 @@ else: # Accountant
 # بناء القائمة الجانبية
 with st.sidebar:
     if logo_b64:
-        st.markdown(f"""
-            <div style="text-align: center; margin-bottom: 10px;">
-                <img src="data:image/png;base64,{logo_b64}" style="width: 120px;">
-            </div>
-            <div style="text-align: center; color: #BE9D5F; font-size: 1.25rem; font-weight: 800; letter-spacing: 1px;">
-                MA CO.
-            </div>
-            <div style="text-align: center; color: #A29F98; font-size: 0.85rem; margin-bottom: 15px;">
-                للتطوير العقاري والإكساء
-            </div>
-            <div style="padding: 10px; background: rgba(190, 157, 95, 0.15); border-radius: 8px; text-align: center; margin-bottom: 20px;">
-                <div style="font-size: 0.9rem; color: #BE9D5F;">المستخدم الحالي:</div>
-                <div style="font-weight: 800; font-size: 1.05rem; color: #FFFFFF;">{current_user['full_name']}</div>
-                <div style="font-size: 0.8rem; color: #E2E1DE;">الصلاحية: {user_role}</div>
-            </div>
-            <div style="height: 1.5px; background: linear-gradient(to right, transparent, #BE9D5F, transparent); margin-bottom: 15px;"></div>
-        """, unsafe_allow_html=True)
+        st.markdown(f'<div style="text-align: center; margin-bottom: 8px;"><img src="data:image/png;base64,{logo_b64}" style="width: 110px;"></div>', unsafe_allow_html=True)
+    st.markdown("""
+        <div style="text-align: center; color: #BE9D5F; font-size: 1.2rem; font-weight: 800; letter-spacing: 1px;">MA CO.</div>
+        <div style="text-align: center; color: #A29F98; font-size: 0.8rem; margin-bottom: 12px;">للتطوير العقاري والإكساء</div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown(f"""
+        <div style="padding: 8px; background: rgba(190, 157, 95, 0.15); border-radius: 8px; text-align: center; margin-bottom: 15px;">
+            <div style="font-size: 0.8rem; color: #BE9D5F;">المستخدم الحالي:</div>
+            <div style="font-weight: 800; font-size: 1rem; color: #FFFFFF;">{current_user['full_name']}</div>
+            <div style="font-size: 0.75rem; color: #E2E1DE;">الصلاحية: {user_role}</div>
+        </div>
+        <div style="height: 1px; background: #BE9D5F; margin-bottom: 12px;"></div>
+    """, unsafe_allow_html=True)
     
     menu = st.sidebar.radio("التنقل السريع", allowed_menus)
 
-    st.markdown("<br><hr style='border-color: rgba(190, 157, 95, 0.4);'>", unsafe_allow_html=True)
+    st.markdown("<br><hr style='border-color: rgba(190, 157, 95, 0.3);'>", unsafe_allow_html=True)
     if st.sidebar.button("🚪 تسجيل الخروج من النظام"):
         st.session_state.authenticated = False
         st.session_state.user_info = None
         st.rerun()
 
-# ترويسة النظام في الصفحة الرئيسية
-logo_header_html = f'<img src="data:image/png;base64,{logo_b64}" style="height: 55px;">' if logo_b64 else ''
+# ----------------------------------------------------
+# ترويسة الصفحة الرسمية
+# ----------------------------------------------------
+logo_header_img = f'<img src="data:image/png;base64,{logo_b64}" style="height: 50px;">' if logo_b64 else ''
 st.markdown(f"""
-    <div class="brand-header-box">
-        {logo_header_html}
+    <div style="display: flex; align-items: center; gap: 15px; border-bottom: 2px solid #BE9D5F; padding-bottom: 12px; margin-bottom: 25px; direction: rtl;">
+        {logo_header_img}
         <div>
-            <h1 style="margin: 0; font-size: 1.9rem; color: #0F4733;">منظومة الإدارة والرقابة المالية</h1>
-            <div style="color: #BE9D5F; font-size: 0.95rem; font-weight: 700;">MA For Real Estate Development & Contracting</div>
+            <h2 style="margin: 0; padding: 0; font-size: 1.7rem; color: #0F4733; font-weight: 800;">منظومة الإدارة والرقابة المالية</h2>
+            <div style="color: #BE9D5F; font-size: 0.9rem; font-weight: 700; margin-top: 3px;">MA Real Estate Development &amp; Contracting</div>
         </div>
     </div>
 """, unsafe_allow_html=True)
@@ -503,10 +480,148 @@ if menu == "📊 لوحة المؤشرات العامة والأرصدة":
         GROUP BY p.id, p.name, p.project_type, p.status;
     """
     df_proj_summary = pd.read_sql(query_proj_summary, conn)
-    st.dataframe(df_proj_summary, width='stretch')
+    st.dataframe(df_proj_summary, use_container_width=True)
 
 # ====================================================
-# 2. كشوفات حسابات المستثمرين التفصيلية
+# 2. هيكل الشركاء ورأس المال والأرباح
+# ====================================================
+elif menu == "🤝 هيكل الشركاء ورأس المال والأرباح":
+    st.subheader("🤝 هيكل ملكية الشركة وحساب الحصص تلقائياً بدون غش")
+    
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT COALESCE(SUM(ROUND(t.amount_usd * p.management_fee_rate, 2)), 0)
+        FROM projects p
+        JOIN transactions t ON p.id = t.project_id
+        WHERE t.direction = 'OUT' AND p.project_type != 'Internal';
+    """)
+    total_company_profit = float(cur.fetchone()[0])
+
+    cur.execute("SELECT partner_equity_pct, salary_amount, salary_currency FROM stakeholders WHERE name = 'حمزة ديب';")
+    h_data = cur.fetchone()
+    hamza_pct = float(h_data[0]) if (h_data and h_data[0] is not None and float(h_data[0]) > 0) else 15.00
+    hamza_sal = float(h_data[1]) if h_data and h_data[1] is not None else 0.00
+    hamza_sal_curr = h_data[2] if h_data and h_data[2] else 'USD'
+
+    # حساب رأس مال مصعب
+    cur.execute("""
+        SELECT COALESCE(SUM(amount_usd), 0)
+        FROM transactions t
+        LEFT JOIN stakeholders s ON t.stakeholder_id = s.id
+        WHERE (s.name = 'مصعب المصري' OR t.description LIKE '%مصعب%')
+          AND t.tx_type IN ('ايراد عام', 'مصروف عام') AND t.description LIKE '%راس مال%';
+    """)
+    mosab_capital = float(cur.fetchone()[0])
+    if mosab_capital <= 0:
+        mosab_capital = 11435.00
+
+    # حساب رأس مال سامر (يشمل أي دفعات رأس مال جديدة)
+    cur.execute("""
+        SELECT COALESCE(SUM(amount_usd), 0)
+        FROM transactions t
+        LEFT JOIN stakeholders s ON t.stakeholder_id = s.id
+        WHERE (s.name = 'سامر ديب' OR t.description LIKE '%سامر%')
+          AND t.tx_type = 'ايراد عام';
+    """)
+    samer_capital = float(cur.fetchone()[0])
+    if samer_capital <= 0:
+        samer_capital = 1814.00
+
+    total_financial_capital = mosab_capital + samer_capital
+
+    remaining_equity = max(0.0, 100.0 - hamza_pct)
+    if total_financial_capital > 0:
+        mosab_pct = (mosab_capital / total_financial_capital) * remaining_equity
+        samer_pct = (samer_capital / total_financial_capital) * remaining_equity
+    else:
+        mosab_pct = remaining_equity
+        samer_pct = 0.0
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.markdown(f"""
+            <div class="metric-card" style="border-right-color: #0F4733;">
+                <div class="metric-title">إجمالي رأس المال التأسيسي المدفوع</div>
+                <div class="metric-value-usd">${total_financial_capital:,.2f}</div>
+            </div>
+        """, unsafe_allow_html=True)
+    with c2:
+        st.markdown(f"""
+            <div class="metric-card" style="border-right-color: #BE9D5F;">
+                <div class="metric-title">أرباح أتعاب الإدارة المتراكمة</div>
+                <div class="metric-value-gold">${total_company_profit:,.2f}</div>
+            </div>
+        """, unsafe_allow_html=True)
+    with c3:
+        st.markdown(f"""
+            <div class="metric-card" style="border-right-color: #44494B;">
+                <div class="metric-title">حصة حمزة ديب الإدارية المحمية</div>
+                <div class="metric-value-usd" style="color: #BE9D5F;">{hamza_pct:.2f}%</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    partners_breakdown = [
+        {
+            "الشريك": "مصعب المصري",
+            "صفة الشراكة": "صاحب ومؤسس الشركة (شريك مالي وإداري)",
+            "المساهمة في رأس المال ($)": f"${mosab_capital:,.2f}",
+            "نسبة المساهمة المالية": f"{(mosab_capital/total_financial_capital*100):.1f}%",
+            "نسبة الملكية الإجمالية من الشركة": f"{mosab_pct:.2f}%",
+            "حصة الأرباح المحققة ($)": f"${(total_company_profit * mosab_pct / 100.0):,.2f}",
+            "ملاحظات": "تُحسب آلياً من رأس المال بعد استقطاع حصة الإدارة"
+        },
+        {
+            "الشريك": "سامر ديب",
+            "صفة الشراكة": "مساهم برأس المال وشريك",
+            "المساهمة في رأس المال ($)": f"${samer_capital:,.2f}",
+            "نسبة المساهمة المالية": f"{(samer_capital/total_financial_capital*100):.1f}%",
+            "نسبة الملكية الإجمالية من الشركة": f"{samer_pct:.2f}%",
+            "حصة الأرباح المحققة ($)": f"${(total_company_profit * samer_pct / 100.0):,.2f}",
+            "ملاحظات": "تُحسب نسبته آلياً بالمليم حسب مساهمته النقدية"
+        },
+        {
+            "الشريك": "حمزة ديب",
+            "صفة الشراكة": "شريك إداري (Sweat Equity) + موظف رسمي",
+            "المساهمة في رأس المال ($)": "$0.00 (بدون مساهمة نقدية)",
+            "نسبة المساهمة المالية": "0.0%",
+            "نسبة الملكية الإجمالية من الشركة": f"{hamza_pct:.2f}%",
+            "حصة الأرباح المحققة ($)": f"${(total_company_profit * hamza_pct / 100.0):,.2f}",
+            "ملاحظات": f"راتب شهري مسجل: {hamza_sal:,.0f} {hamza_sal_curr} + النسبة الثابتة"
+        }
+    ]
+    st.dataframe(pd.DataFrame(partners_breakdown), use_container_width=True)
+
+    cur.execute("UPDATE stakeholders SET partner_equity_pct = %s WHERE name = 'مصعب المصري';", (round(mosab_pct, 2),))
+    cur.execute("UPDATE stakeholders SET partner_equity_pct = %s WHERE name = 'سامر ديب';", (round(samer_pct, 2),))
+    cur.execute("UPDATE stakeholders SET partner_equity_pct = %s WHERE name = 'حمزة ديب';", (round(hamza_pct, 2),))
+    conn.commit()
+    cur.close()
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("### ⚙️ تعديل نسبة وراتب حمزة ديب في أي وقت")
+    with st.form("update_hamza_form"):
+        col_h1, col_h2, col_h3 = st.columns(3)
+        with col_h1:
+            new_h_pct = st.number_input("نسبة حمزة ديب من أرباح الشركة %", min_value=1.0, max_value=50.0, value=float(hamza_pct), step=1.0)
+        with col_h2:
+            new_h_sal = st.number_input("الراتب الشهري كموظف", min_value=0.0, value=float(hamza_sal), step=50.0)
+        with col_h3:
+            new_h_curr = st.selectbox("عملة الراتب", ["USD", "SYP"], index=0 if hamza_sal_curr == "USD" else 1)
+
+        if st.form_submit_button("💾 تحديث النسبة والراتب وإعادة الحساب فوراً"):
+            cur = conn.cursor()
+            cur.execute("""
+                UPDATE stakeholders 
+                SET partner_equity_pct = %s, salary_amount = %s, salary_currency = %s, role = 'Partner'
+                WHERE name = 'حمزة ديب';
+            """, (new_h_pct, new_h_sal, new_h_curr))
+            conn.commit()
+            cur.close()
+            st.success(f"تم اعتماد نسبة {new_h_pct}% لحمزة ديب وإعادة احتساب الحصص تلقائياً!")
+            st.rerun()
+
+# ====================================================
+# 3. كشوفات حسابات المستثمرين التفصيلية
 # ====================================================
 elif menu == "📑 كشوفات حسابات المستثمرين":
     st.subheader("📑 كشوفات حسابات المستثمرين والعملاء")
@@ -582,7 +697,7 @@ elif menu == "📑 كشوفات حسابات المستثمرين":
             ORDER BY t.tx_date DESC, t.id DESC;
         """
         df_inv_tx = pd.read_sql(query_inv_tx, conn, params=(proj_id,))
-        st.dataframe(df_inv_tx, width='stretch')
+        st.dataframe(df_inv_tx, use_container_width=True)
 
         col_dn1, col_dn2 = st.columns(2)
         with col_dn1:
@@ -599,7 +714,7 @@ elif menu == "📑 كشوفات حسابات المستثمرين":
             ]
             pdf_inv_bytes = generate_investor_statement_pdf(investor_name, selected_proj_name, stats_dict, tx_raw_list)
             st.download_button(
-                label="📥 تحميل كشف الحساب الرسمي كـ PDF",
+                label="📥 تحميل كشف الحساب كـ PDF",
                 data=pdf_inv_bytes,
                 file_name=f"Statement_{investor_name}_{selected_proj_name}.pdf",
                 mime="application/pdf"
@@ -617,7 +732,7 @@ elif menu == "📑 كشوفات حسابات المستثمرين":
         st.info("لا توجد مشاريع مسجلة حالياً.")
 
 # ====================================================
-# 3. التحويل بين الخزائن والصرافة
+# 4. التحويل بين الخزائن والصرافة
 # ====================================================
 elif menu == "💱 التحويل بين الخزائن والصرافة":
     st.subheader("💱 التحويل المالي والصرافة بين الصناديق (USD ⮂ SYP)")
@@ -697,7 +812,6 @@ elif menu == "💱 التحويل بين الخزائن والصرافة":
 
                     src_v_id = usd_vault_id if from_currency == "USD" else syp_vault_id
                     dst_v_id = syp_vault_id if to_currency == "SYP" else usd_vault_id
-                    
                     amt_usd_equiv = source_amount if from_currency == "USD" else target_amount
 
                     cur.execute("""
@@ -739,10 +853,10 @@ elif menu == "💱 التحويل بين الخزائن والصرافة":
         ORDER BY t.tx_date DESC, t.id DESC;
     """
     df_trf_hist = pd.read_sql(query_transfers_history, conn)
-    st.dataframe(df_trf_hist, width='stretch')
+    st.dataframe(df_trf_hist, use_container_width=True)
 
 # ====================================================
-# 4. طباعة السندات وتصدير التقارير (PDF & Excel)
+# 5. طباعة السندات وتصدير التقارير (PDF & Excel)
 # ====================================================
 elif menu == "🖨️ طباعة السندات وتصدير التقارير":
     st.subheader("🖨️ طباعة السندات المالية وتصدير التقارير")
@@ -877,7 +991,7 @@ elif menu == "🖨️ طباعة السندات وتصدير التقارير":
             )
 
 # ====================================================
-# 5. مسيرات الرواتب الشهرية المؤتمتة
+# 6. مسيرات الرواتب الشهرية المؤتمتة
 # ====================================================
 elif menu == "💳 مسيرات الرواتب الشهرية":
     st.subheader("💳 احتساب وصرف مسيرات الرواتب وربطها بالدوام")
@@ -922,7 +1036,6 @@ elif menu == "💳 مسيرات الرواتب الشهرية":
 
             hourly_rate = (base_salary / 240.0) if base_salary > 0 else 0.0
             daily_rate = (base_salary / 30.0) if base_salary > 0 else 0.0
-            
             calculated_ot_amount = ot_hours * hourly_rate * 1.5
             calculated_deduction = absent_days * daily_rate
 
@@ -931,12 +1044,12 @@ elif menu == "💳 مسيرات الرواتب الشهرية":
             with col_m1:
                 st.metric("الراتب الأساسي", f"{base_salary:,.2f} {currency}")
             with col_m2:
-                st.metric("ساعات الإضافي المسجلة", f"{ot_hours:.2f} س", f"+{calculated_ot_amount:,.2f} {currency}")
+                st.metric("ساعات الإضافي", f"{ot_hours:.2f} س", f"+{calculated_ot_amount:,.2f} {currency}")
             with col_m3:
-                st.metric("أيام الغياب المسجلة", f"{absent_days} يوم", f"-{calculated_deduction:,.2f} {currency}", delta_color="inverse")
+                st.metric("أيام الغياب", f"{absent_days} يوم", f"-{calculated_deduction:,.2f} {currency}", delta_color="inverse")
             with col_m4:
                 net_salary = base_salary + calculated_ot_amount - calculated_deduction
-                st.metric("صافي الراتب المستحق", f"{net_salary:,.2f} {currency}")
+                st.metric("صافي المستحق", f"{net_salary:,.2f} {currency}")
 
             cur = conn.cursor()
             cur.execute("SELECT id, paid_at, transaction_id FROM payroll_records WHERE employee_id = %s AND payroll_month = %s;", (emp_id, payroll_month))
@@ -944,10 +1057,10 @@ elif menu == "💳 مسيرات الرواتب الشهرية":
             cur.close()
 
             if already_paid:
-                st.warning(f"⚠️ تنبيه: تم صرف راتب شهر {payroll_month} لهذا الموظف مسبقاً برقم فاتورة: `{already_paid[2]}`")
+                st.warning(f"⚠️ تم صرف راتب شهر {payroll_month} مسبقاً برقم فاتورة: `{already_paid[2]}`")
             else:
                 with st.form("confirm_payout_form"):
-                    st.markdown("#### 💵 اعتماد سند صرف الراتب")
+                    st.markdown("#### 💵 اعتماد صرف الراتب")
                     c_f1, c_f2 = st.columns(2)
                     with c_f1:
                         payment_method = st.selectbox("طريقة التسليم", ["كاش", "حوالة"])
@@ -955,12 +1068,11 @@ elif menu == "💳 مسيرات الرواتب الشهرية":
                     with c_f2:
                         payout_notes = st.text_input("ملاحظات السند", value=f"صرف راتب شهر {payroll_month} - {selected_emp_name}")
 
-                    if st.form_submit_button("🚀 اعتماد صرف الراتب وخصمه من الصندوق"):
+                    if st.form_submit_button("🚀 اعتماد الصرف وتحديث الخزينة"):
                         cur = conn.cursor()
                         try:
                             sal_tx_id = f"SAL-{payroll_month}-{emp_id}"
                             v_id = 1 if currency == 'USD' else 2
-                            
                             cur.execute("SELECT exchange_rate FROM transactions WHERE currency = 'SYP' ORDER BY tx_date DESC LIMIT 1;")
                             r_row = cur.fetchone()
                             syp_rate = float(r_row[0]) if r_row else 131.0
@@ -977,11 +1089,11 @@ elif menu == "💳 مسيرات الرواتب الشهرية":
                             """, (emp_id, payroll_month, base_salary, ot_hours, calculated_ot_amount, absent_days, calculated_deduction, net_salary, currency, sal_tx_id))
 
                             conn.commit()
-                            st.success(f"تم بنجاح صرف راتب شهر {payroll_month} برقم سند `{sal_tx_id}` وتحديث الخزينة!")
+                            st.success(f"تم بنجاح صرف راتب شهر {payroll_month}!")
                             st.rerun()
                         except Exception as e:
                             conn.rollback()
-                            st.error(f"خطأ أثناء الصرف: {e}")
+                            st.error(f"خطأ: {e}")
                         finally:
                             cur.close()
 
@@ -1005,10 +1117,10 @@ elif menu == "💳 مسيرات الرواتب الشهرية":
             ORDER BY p.payroll_month DESC, p.id DESC;
         """
         df_pay_history = pd.read_sql(query_pay_all, conn)
-        st.dataframe(df_pay_history, width='stretch')
+        st.dataframe(df_pay_history, use_container_width=True)
 
 # ====================================================
-# 6. جدول دوامات وساعات العمل
+# 7. جدول دوامات وساعات العمل
 # ====================================================
 elif menu == "⏱️ جدول دوامات وساعات العمل":
     st.subheader("⏱️ جدول متابعة دوام وساعات عمل الموظفين")
@@ -1020,9 +1132,7 @@ elif menu == "⏱️ جدول دوامات وساعات العمل":
     ])
 
     with tab_att_log:
-        st.markdown("### 📋 سجل الدوامات المسجلة")
         col_fl1, col_fl2 = st.columns(2)
-        
         emps_df = pd.read_sql("SELECT id, name FROM stakeholders WHERE role IN ('Employee', 'Partner') ORDER BY name;", conn)
         with col_fl1:
             emp_filter = st.selectbox("تصفية بحسب الموظف", ["الكل"] + emps_df['name'].tolist())
@@ -1050,12 +1160,10 @@ elif menu == "⏱️ جدول دوامات وساعات العمل":
             query_att += f" AND a.status = '{status_filter}'"
             
         query_att += " ORDER BY a.work_date DESC, a.id DESC;"
-        
         df_att = pd.read_sql(query_att, conn)
-        st.dataframe(df_att, width='stretch')
+        st.dataframe(df_att, use_container_width=True)
 
     with tab_att_new:
-        st.markdown("### ➕ تسجيل حركة دوام يومية")
         with st.form("new_attendance_form", clear_on_submit=True):
             ca1, ca2, ca3 = st.columns(3)
             with ca1:
@@ -1066,22 +1174,15 @@ elif menu == "⏱️ جدول دوامات وساعات العمل":
             with ca2:
                 t_in = st.time_input("وقت الدخول / الحضور", time(9, 0))
                 t_out = st.time_input("وقت الخروج / الانصراف", time(17, 0))
-                standard_hours = st.number_input("ساعات الدوام النظامية المعتمدة", min_value=1.0, max_value=12.0, value=8.0)
+                standard_hours = st.number_input("ساعات الدوام النظامية", min_value=1.0, max_value=12.0, value=8.0)
 
             with ca3:
                 datetime_in = datetime.combine(datetime.today(), t_in)
                 datetime_out = datetime.combine(datetime.today(), t_out)
-                
-                if datetime_out >= datetime_in:
-                    duration = (datetime_out - datetime_in).total_seconds() / 3600.0
-                else:
-                    duration = 0.0
-
+                duration = (datetime_out - datetime_in).total_seconds() / 3600.0 if datetime_out >= datetime_in else 0.0
                 calc_hours = duration if att_status in ["حاضر", "متأخر"] else 0.0
                 calc_overtime = max(0.0, calc_hours - standard_hours)
-
-                st.markdown(f"**إجمالي الساعات:** {calc_hours:.2f} ساعة")
-                st.markdown(f"**ساعات الإضافي:** {calc_overtime:.2f} ساعة")
+                st.markdown(f"**ساعات العمل:** {calc_hours:.2f} س | **إضافي:** {calc_overtime:.2f} س")
                 att_notes = st.text_area("ملاحظات")
 
             if st.form_submit_button("💾 حفظ قيد الدوام"):
@@ -1092,44 +1193,37 @@ elif menu == "⏱️ جدول دوامات وساعات العمل":
                         INSERT INTO employee_attendance (employee_id, work_date, time_in, time_out, total_hours, status, overtime_hours, notes)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                         ON CONFLICT (employee_id, work_date) DO UPDATE SET
-                            time_in = EXCLUDED.time_in,
-                            time_out = EXCLUDED.time_out,
-                            total_hours = EXCLUDED.total_hours,
-                            status = EXCLUDED.status,
-                            overtime_hours = EXCLUDED.overtime_hours,
-                            notes = EXCLUDED.notes;
+                            time_in = EXCLUDED.time_in, time_out = EXCLUDED.time_out,
+                            total_hours = EXCLUDED.total_hours, status = EXCLUDED.status,
+                            overtime_hours = EXCLUDED.overtime_hours, notes = EXCLUDED.notes;
                     """, (emp_id_val, att_date, t_in if att_status in ["حاضر", "متأخر"] else None, t_out if att_status in ["حاضر", "متأخر"] else None, calc_hours, att_status, calc_overtime, att_notes))
                     conn.commit()
-                    st.success(f"تم حفظ دوام {selected_emp_att} بنجاح!")
+                    st.success("تم حفظ الدوام بنجاح!")
                     st.rerun()
                 except Exception as e:
                     conn.rollback()
-                    st.error(f"خطأ أثناء الحفظ: {e}")
+                    st.error(f"خطأ: {e}")
                 finally:
                     cur.close()
 
     with tab_att_rep:
-        st.markdown("### 📊 ملخص ساعات عمل الموظفين")
         query_rep = """
             SELECT 
                 s.name AS "الموظف",
                 COUNT(CASE WHEN a.status = 'حاضر' THEN 1 END) AS "أيام الحضور",
-                COUNT(CASE WHEN a.status = 'متأخر' THEN 1 END) AS "أيام التأخير",
                 COUNT(CASE WHEN a.status = 'غياب' THEN 1 END) AS "أيام الغياب",
-                COUNT(CASE WHEN a.status = 'إجازة' THEN 1 END) AS "أيام الإجازة",
-                COALESCE(SUM(a.total_hours), 0) AS "إجمالي ساعات العمل",
-                COALESCE(SUM(a.overtime_hours), 0) AS "إجمالي الساعات الإضافية"
+                COALESCE(SUM(a.total_hours), 0) AS "إجمالي الساعات",
+                COALESCE(SUM(a.overtime_hours), 0) AS "ساعات الإضافي"
             FROM stakeholders s
             LEFT JOIN employee_attendance a ON s.id = a.employee_id
             WHERE s.role IN ('Employee', 'Partner')
-            GROUP BY s.id, s.name
-            ORDER BY "إجمالي ساعات العمل" DESC;
+            GROUP BY s.id, s.name;
         """
         df_rep = pd.read_sql(query_rep, conn)
-        st.dataframe(df_rep, width='stretch')
+        st.dataframe(df_rep, use_container_width=True)
 
 # ====================================================
-# 7. إدارة المخزون ومواد المشاريع
+# 8. إدارة المخزون ومواد المشاريع
 # ====================================================
 elif menu == "📦 إدارة المخزون ومواد المشاريع":
     st.subheader("📦 إدارة المستودع والمخزون المربوط بالفواتير")
@@ -1141,7 +1235,6 @@ elif menu == "📦 إدارة المخزون ومواد المشاريع":
     ])
 
     with tab_stock:
-        st.markdown("### 🧱 أرصدة المواد المربوطة بفواتير الشراء والتوريد")
         query_stock = """
             SELECT 
                 s.item_name AS "اسم المادة / الصنف",
@@ -1150,46 +1243,42 @@ elif menu == "📦 إدارة المخزون ومواد المشاريع":
                 s.avg_unit_cost AS "تكلفة الوحدة",
                 ROUND(s.quantity_on_hand * s.avg_unit_cost, 2) AS "إجمالي القيمة التقديرية",
                 s.currency AS "العملة",
-                COUNT(i.id) AS "عدد مرات التوريد المسجلة",
-                s.last_updated::date AS "تاريخ آخر تحديث"
+                COUNT(i.id) AS "عدد مرات التوريد",
+                s.last_updated::date AS "تاريخ التحديث"
             FROM inventory_stock s
             LEFT JOIN invoice_items i ON s.item_name = i.item_name
             GROUP BY s.id, s.item_name, s.category, s.quantity_on_hand, s.avg_unit_cost, s.currency, s.last_updated
             ORDER BY s.quantity_on_hand DESC;
         """
         df_stock = pd.read_sql(query_stock, conn)
-        st.dataframe(df_stock, width='stretch')
+        st.dataframe(df_stock, use_container_width=True)
 
     with tab_issue:
-        st.markdown("### 📤 إصدار أمر صرف مواد لمشروع وربطها بفاتورة جديدة")
         df_avail = pd.read_sql("SELECT item_name, quantity_on_hand, avg_unit_cost, currency FROM inventory_stock WHERE quantity_on_hand > 0;", conn)
         active_projects = pd.read_sql("SELECT id, name FROM projects WHERE status = 'Active' AND project_type != 'Internal' ORDER BY name;", conn)
 
-        if df_avail.empty:
-            st.warning("لا توجد كميات متوفرة في المستودع حالياً.")
-        elif active_projects.empty:
-            st.warning("لا توجد مشاريع نشطة للصرف إليها.")
+        if df_avail.empty or active_projects.empty:
+            st.warning("لا توجد مواد متوفرة بالمستودع أو لا توجد مشاريع نشطة.")
         else:
             with st.form("issue_material_form"):
                 ci1, ci2 = st.columns(2)
                 with ci1:
-                    selected_item = st.selectbox("اختر المادة من المخزون", df_avail['item_name'].tolist())
+                    selected_item = st.selectbox("المادة المراد صرفها", df_avail['item_name'].tolist())
                     item_info = df_avail[df_avail['item_name'] == selected_item].iloc[0]
-                    st.caption(f"الكمية المتوفرة: **{item_info['quantity_on_hand']}** | سعر الوحدة: **{item_info['avg_unit_cost']} {item_info['currency']}**")
-                    issue_qty = st.number_input("الكمية المراد صرفها", min_value=0.01, max_value=float(item_info['quantity_on_hand']), value=1.0)
+                    st.caption(f"المتوفر: {item_info['quantity_on_hand']} | سعر الوحدة: {item_info['avg_unit_cost']} {item_info['currency']}")
+                    issue_qty = st.number_input("الكمية", min_value=0.01, max_value=float(item_info['quantity_on_hand']), value=1.0)
 
                 with ci2:
                     target_proj_name = st.selectbox("المشروع المستلم", active_projects['name'].tolist())
-                    issue_date = st.date_input("تاريخ الصرف", datetime.now().date())
+                    issue_date = st.date_input("التاريخ", datetime.now().date())
                     issue_notes = st.text_input("ملاحظات البند ومكان تركيبه")
 
                 total_issue_cost = issue_qty * float(item_info['avg_unit_cost'])
                 st.info(f"💰 التكلفة الإجمالية: **{total_issue_cost:,.2f} {item_info['currency']}**")
 
-                if st.form_submit_button("🚀 اعتماد الصرف وتوليد الفاتورة تلقائياً"):
+                if st.form_submit_button("🚀 اعتماد الصرف وتوليد الفاتورة"):
                     p_id = int(active_projects.loc[active_projects['name'] == target_proj_name, 'id'].values[0])
                     v_id = 1 if item_info['currency'] == 'USD' else 2
-                    
                     cur = conn.cursor()
                     try:
                         issue_inv_id = f"MAT-{int(datetime.now().timestamp())}"
@@ -1215,16 +1304,15 @@ elif menu == "📦 إدارة المخزون ومواد المشاريع":
                         """, (issue_qty, selected_item))
 
                         conn.commit()
-                        st.success(f"تم صرف {issue_qty} من {selected_item} بنجاح وإنشاء الفاتورة التفصيلية `{issue_inv_id}`!")
+                        st.success(f"تم صرف المواد وتوليد السند `{issue_inv_id}`!")
                         st.rerun()
                     except Exception as e:
                         conn.rollback()
-                        st.error(f"خطأ أثناء الصرف: {e}")
+                        st.error(f"خطأ: {e}")
                     finally:
                         cur.close()
 
     with tab_history:
-        st.markdown("### 📑 سجل الفواتير والمواد المصروفة من المخزون")
         query_issues = """
             SELECT 
                 t.id AS "رقم الفاتورة",
@@ -1243,142 +1331,7 @@ elif menu == "📦 إدارة المخزون ومواد المشاريع":
             ORDER BY t.tx_date DESC;
         """
         df_issues = pd.read_sql(query_issues, conn)
-        st.dataframe(df_issues, width='stretch')
-
-# ====================================================
-# 8. هيكل الشركاء ورأس المال والأرباح (Admin فقط)
-# ====================================================
-elif menu == "🤝 هيكل الشركاء ورأس المال والأرباح":
-    st.subheader("🤝 هيكل ملكية الشركة وحساب الحصص تلقائياً بدون غش")
-    
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT COALESCE(SUM(ROUND(t.amount_usd * p.management_fee_rate, 2)), 0)
-        FROM projects p
-        JOIN transactions t ON p.id = t.project_id
-        WHERE t.direction = 'OUT' AND p.project_type != 'Internal';
-    """)
-    total_company_profit = float(cur.fetchone()[0])
-
-    cur.execute("SELECT partner_equity_pct, salary_amount, salary_currency FROM stakeholders WHERE name = 'حمزة ديب';")
-    h_data = cur.fetchone()
-    hamza_pct = float(h_data[0]) if h_data and h_data[0] is not None else 15.00
-    hamza_sal = float(h_data[1]) if h_data and h_data[1] is not None else 0.00
-    hamza_sal_curr = h_data[2] if h_data and h_data[2] else 'USD'
-
-    cur.execute("""
-        SELECT COALESCE(SUM(amount_usd), 0)
-        FROM transactions t
-        LEFT JOIN stakeholders s ON t.stakeholder_id = s.id
-        WHERE (s.name = 'مصعب المصري' OR t.description LIKE '%مصعب%')
-          AND t.tx_type IN ('ايراد عام', 'مصروف عام') AND t.description LIKE '%راس مال%';
-    """)
-    mosab_capital = float(cur.fetchone()[0])
-    if mosab_capital <= 0:
-        mosab_capital = 11435.00
-
-    cur.execute("""
-        SELECT COALESCE(SUM(amount_usd), 0)
-        FROM transactions t
-        LEFT JOIN stakeholders s ON t.stakeholder_id = s.id
-        WHERE (s.name = 'سامر ديب' OR t.description LIKE '%سامر%')
-          AND t.tx_type = 'ايراد عام';
-    """)
-    samer_capital = float(cur.fetchone()[0])
-    if samer_capital <= 0:
-        samer_capital = 1814.00
-
-    total_financial_capital = mosab_capital + samer_capital
-
-    remaining_equity = max(0.0, 100.0 - hamza_pct)
-    if total_financial_capital > 0:
-        mosab_pct = (mosab_capital / total_financial_capital) * remaining_equity
-        samer_pct = (samer_capital / total_financial_capital) * remaining_equity
-    else:
-        mosab_pct = remaining_equity
-        samer_pct = 0.0
-
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.markdown(f"""
-            <div class="metric-card" style="border-right-color: #0F4733;">
-                <div class="metric-title">إجمالي رأس المال التأسيسي المدفوع</div>
-                <div class="metric-value-usd">${total_financial_capital:,.2f}</div>
-            </div>
-        """, unsafe_allow_html=True)
-    with c2:
-        st.markdown(f"""
-            <div class="metric-card" style="border-right-color: #BE9D5F;">
-                <div class="metric-title">أرباح أتعاب الإدارة المتراكمة</div>
-                <div class="metric-value-gold">${total_company_profit:,.2f}</div>
-            </div>
-        """, unsafe_allow_html=True)
-    with c3:
-        st.markdown(f"""
-            <div class="metric-card" style="border-right-color: #44494B;">
-                <div class="metric-title">حصة حمزة ديب الإدارية المحمية</div>
-                <div class="metric-value-usd" style="color: #BE9D5F;">{hamza_pct:.2f}%</div>
-            </div>
-        """, unsafe_allow_html=True)
-
-    partners_breakdown = [
-        {
-            "الشريك": "مصعب المصري",
-            "صفة الشراكة": "صاحب ومؤسس الشركة (شريك مالي وإداري)",
-            "المساهمة في رأس المال ($)": f"${mosab_capital:,.2f}",
-            "نسبة المساهمة المالية": f"{(mosab_capital/total_financial_capital*100):.1f}%",
-            "نسبة الملكية الإجمالية من الشركة": f"{mosab_pct:.2f}%",
-            "حصة الأرباح المحققة ($)": f"${(total_company_profit * mosab_pct / 100.0):,.2f}",
-            "ملاحظات": "تُحسب آلياً من رأس المال بعد استقطاع حصة الإدارة"
-        },
-        {
-            "الشريك": "سامر ديب",
-            "صفة الشراكة": "مساهم برأس المال وشريك",
-            "المساهمة في رأس المال ($)": f"${samer_capital:,.2f}",
-            "نسبة المساهمة المالية": f"{(samer_capital/total_financial_capital*100):.1f}%",
-            "نسبة الملكية الإجمالية من الشركة": f"{samer_pct:.2f}%",
-            "حصة الأرباح المحققة ($)": f"${(total_company_profit * samer_pct / 100.0):,.2f}",
-            "ملاحظات": "تُحسب نسبته آلياً بالمليم حسب مساهمته النقدية"
-        },
-        {
-            "الشريك": "حمزة ديب",
-            "صفة الشراكة": "شريك إداري (Sweat Equity) + موظف رسمي",
-            "المساهمة في رأس المال ($)": "$0.00 (بدون مساهمة نقدية)",
-            "نسبة المساهمة المالية": "0.0%",
-            "نسبة الملكية الإجمالية من الشركة": f"{hamza_pct:.2f}%",
-            "حصة الأرباح المحققة ($)": f"${(total_company_profit * hamza_pct / 100.0):,.2f}",
-            "ملاحظات": f"راتب شهري مسجل: {hamza_sal:,.0f} {hamza_sal_curr} + النسبة الثابتة"
-        }
-    ]
-    st.dataframe(pd.DataFrame(partners_breakdown), width='stretch')
-
-    cur.execute("UPDATE stakeholders SET partner_equity_pct = %s WHERE name = 'مصعب المصري';", (round(mosab_pct, 2),))
-    cur.execute("UPDATE stakeholders SET partner_equity_pct = %s WHERE name = 'سامر ديب';", (round(samer_pct, 2),))
-    conn.commit()
-    cur.close()
-
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("### ⚙️ تعديل نسبة وراتب حمزة ديب في أي وقت")
-    with st.form("update_hamza_form"):
-        col_h1, col_h2, col_h3 = st.columns(3)
-        with col_h1:
-            new_h_pct = st.number_input("نسبة حمزة ديب من أرباح الشركة %", min_value=0.0, max_value=50.0, value=float(hamza_pct), step=1.0)
-        with col_h2:
-            new_h_sal = st.number_input("الراتب الشهري كموظف", min_value=0.0, value=float(hamza_sal), step=50.0)
-        with col_h3:
-            new_h_curr = st.selectbox("عملة الراتب", ["USD", "SYP"], index=0 if hamza_sal_curr == "USD" else 1)
-
-        if st.form_submit_button("💾 تحديث النسبة والراتب وإعادة الحساب فوراً"):
-            cur = conn.cursor()
-            cur.execute("""
-                UPDATE stakeholders 
-                SET partner_equity_pct = %s, salary_amount = %s, salary_currency = %s, role = 'Partner'
-                WHERE name = 'حمزة ديب';
-            """, (new_h_pct, new_h_sal, new_h_curr))
-            conn.commit()
-            cur.close()
-            st.success(f"تم اعتماد نسبة {new_h_pct}% لحمزة ديب وإعادة احتساب الحصص تلقائياً!")
-            st.rerun()
+        st.dataframe(df_issues, use_container_width=True)
 
 # ====================================================
 # 9. دليل وتعديل بيانات الأطراف
@@ -1404,13 +1357,12 @@ elif menu == "👥 دليل وتعديل بيانات الأطراف":
         ORDER BY s.id ASC;
     """
     df_parties = pd.read_sql(query_all_parties, conn)
-    st.dataframe(df_parties, width='stretch')
+    st.dataframe(df_parties, use_container_width=True)
 
-    st.markdown("<br><hr style='border-color: #E2E1DE;'>", unsafe_allow_html=True)
+    st.markdown("<br><hr>", unsafe_allow_html=True)
     st.markdown("### ✏️ تعديل بيانات طرف مسجل")
-    
     party_names = df_parties["الاسم / الطرف"].tolist()
-    selected_party_name = st.selectbox("اختر الطرف الذي تريد تعديل بياناته:", [""] + party_names)
+    selected_party_name = st.selectbox("اختر الطرف المطلوب تعديله:", [""] + party_names)
 
     if selected_party_name:
         cur = conn.cursor()
@@ -1426,33 +1378,28 @@ elif menu == "👥 دليل وتعديل بيانات الأطراف":
             with st.form("edit_party_form"):
                 cp1, cp2, cp3 = st.columns(3)
                 with cp1:
-                    new_name = st.text_input("اسم الطرف / الجهة", value=cur_name if cur_name else "")
-                    new_role = st.selectbox("الدور في الشركة", role_options, index=role_options.index(cur_role) if cur_role in role_options else 0)
+                    new_name = st.text_input("اسم الطرف", value=cur_name if cur_name else "")
+                    new_role = st.selectbox("الدور", role_options, index=role_options.index(cur_role) if cur_role in role_options else 0)
                     new_status = st.selectbox("الحالة", status_options, index=status_options.index(cur_status) if cur_status in status_options else 0)
-                
                 with cp2:
-                    new_sal = st.number_input("الراتب الشهري (في حال كان موظفاً)", min_value=0.0, value=float(cur_sal) if cur_sal else 0.0, step=50.0)
+                    new_sal = st.number_input("الراتب", min_value=0.0, value=float(cur_sal) if cur_sal else 0.0, step=50.0)
                     new_sal_curr = st.selectbox("عملة الراتب", ["USD", "SYP"], index=0 if cur_sal_curr == "USD" else 1)
-                    new_phone = st.text_input("رقم الهاتف / التواصل", value=cur_phone if cur_phone else "")
-                
+                    new_phone = st.text_input("الهاتف", value=cur_phone if cur_phone else "")
                 with cp3:
-                    new_equity = st.number_input("نسبة الشراكة % (في حال كان شريكاً)", min_value=0.0, max_value=100.0, value=float(cur_equity) if cur_equity else 0.0, step=1.0)
-                    new_notes = st.text_area("ملاحظات إضافية", value=cur_notes if cur_notes else "")
+                    new_equity = st.number_input("نسبة الشراكة %", min_value=0.0, max_value=100.0, value=float(cur_equity) if cur_equity else 0.0, step=1.0)
+                    new_notes = st.text_area("ملاحظات", value=cur_notes if cur_notes else "")
 
-                if st.form_submit_button("💾 حفظ تعديلات الطرف فوراً"):
-                    if not new_name.strip():
-                        st.error("لا يمكن ترك اسم الطرف فارغاً.")
-                    else:
-                        cur = conn.cursor()
-                        cur.execute("""
-                            UPDATE stakeholders 
-                            SET name = %s, role = %s, status = %s, salary_amount = %s, salary_currency = %s, partner_equity_pct = %s, phone = %s, notes = %s
-                            WHERE id = %s;
-                        """, (new_name.strip(), new_role, new_status, new_sal, new_sal_curr, new_equity, new_phone.strip(), new_notes.strip(), p_id))
-                        conn.commit()
-                        cur.close()
-                        st.success(f"تم تحديث بيانات الطرف '{new_name}' بنجاح!")
-                        st.rerun()
+                if st.form_submit_button("💾 حفظ التعديلات فوراً"):
+                    cur = conn.cursor()
+                    cur.execute("""
+                        UPDATE stakeholders 
+                        SET name = %s, role = %s, status = %s, salary_amount = %s, salary_currency = %s, partner_equity_pct = %s, phone = %s, notes = %s
+                        WHERE id = %s;
+                    """, (new_name.strip(), new_role, new_status, new_sal, new_sal_curr, new_equity, new_phone.strip(), new_notes.strip(), p_id))
+                    conn.commit()
+                    cur.close()
+                    st.success("تم تحديث البيانات بنجاح!")
+                    st.rerun()
 
 # ====================================================
 # 10. دفتر الحركات وسجل الفواتير
@@ -1493,14 +1440,13 @@ elif menu == "📑 دفتر الحركات وسجل الفواتير":
         base_query += " AND t.direction = 'OUT'"
         
     base_query += " ORDER BY t.tx_date DESC, t.id DESC;"
-    
     df_tx = pd.read_sql(base_query, conn)
-    st.dataframe(df_tx, width='stretch')
+    st.dataframe(df_tx, use_container_width=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("🔍 استعراض تفاصيل وبنود فاتورة معينة")
+    st.subheader("🔍 استعراض بنود فاتورة تفصيلية")
     all_inv_ids = df_tx["رقم الفاتورة"].tolist()
-    search_inv = st.selectbox("اختر رقم الفاتورة لعرض تفاصيل بنودها التفصيلية", [""] + all_inv_ids)
+    search_inv = st.selectbox("اختر رقم الفاتورة", [""] + all_inv_ids)
     if search_inv:
         query_items = f"""
             SELECT item_name AS "اسم البند / المادة", category AS "التصنيف", quantity AS "الكمية", unit_price AS "سعر الوحدة", total_price AS "الإجمالي", currency AS "العملة", notes AS "ملاحظات"
@@ -1508,9 +1454,9 @@ elif menu == "📑 دفتر الحركات وسجل الفواتير":
         """
         df_items = pd.read_sql(query_items, conn)
         if not df_items.empty:
-            st.dataframe(df_items, width='stretch')
+            st.dataframe(df_items, use_container_width=True)
         else:
-            st.info("هذه الحركة عبارة عن سند نقدي مباشر لا يحتوي على بنود مواد تفصيلية.")
+            st.info("سند مالي مباشر لا يتضمن بنود مواد تفصيلية.")
 
 # ====================================================
 # 11. إضافة فاتورة وحركة متعددة البنود
@@ -1540,7 +1486,7 @@ elif menu == "➕ إضافة فاتورة وحركة متعددة البنود":
     with c3:
         currency = st.selectbox("العملة", ["USD", "SYP"])
         rate = st.number_input("سعر الصرف (لليرة السورية)", min_value=1.0, value=1.0 if currency == "USD" else 131.0)
-        has_items = st.checkbox("هل تتضمن الفاتورة بنود ومواد تفصيلية؟", value=True)
+        has_items = st.checkbox("هل تتضمن الفاتورة بنود ومواد تفصيلية؟", value=False)
 
     st.markdown("---")
 
@@ -1549,12 +1495,11 @@ elif menu == "➕ إضافة فاتورة وحركة متعددة البنود":
 
     if has_items:
         st.markdown("#### 2️⃣ جدول بنود الفاتورة")
-        num_items = st.number_input("عدد البنود المراد إدخالها", min_value=1, max_value=20, value=2, step=1)
-        
+        num_items = st.number_input("عدد البنود", min_value=1, max_value=20, value=2, step=1)
         for i in range(int(num_items)):
             ci1, ci2, ci3, ci4, ci5 = st.columns([3, 2, 1.5, 2, 2])
             with ci1:
-                it_name = st.text_input(f"اسم البند / المادة #{i+1}", key=f"it_name_{i}")
+                it_name = st.text_input(f"اسم المادة #{i+1}", key=f"it_name_{i}")
             with ci2:
                 it_cat = st.selectbox(f"التصنيف #{i+1}", ["مواد إكساء", "مصناعيات وورشات", "صحية وكهرباء", "عوازل", "نثريات"], key=f"it_cat_{i}")
             with ci3:
@@ -1566,30 +1511,20 @@ elif menu == "➕ إضافة فاتورة وحركة متعددة البنود":
                 st.markdown(f"<div style='padding-top: 35px; font-weight: bold;'>الإجمالي: {sub_total:,.2f}</div>", unsafe_allow_html=True)
                 final_amount += sub_total
                 if it_name.strip():
-                    items_to_save.append({
-                        "name": it_name.strip(),
-                        "cat": it_cat,
-                        "qty": it_qty,
-                        "price": it_price,
-                        "total": sub_total
-                    })
-
-        st.info(f"💰 **إجمالي قيمة الفاتورة المحسوبة تلقائياً:** {final_amount:,.2f} {currency}")
+                    items_to_save.append({"name": it_name.strip(), "cat": it_cat, "qty": it_qty, "price": it_price, "total": sub_total})
+        st.info(f"💰 **إجمالي الفاتورة:** {final_amount:,.2f} {currency}")
     else:
         final_amount = st.number_input(f"إجمالي المبلغ المالي ({currency})", min_value=0.0, step=100.0)
 
     notes = st.text_area("البيان والملاحظات العامة")
 
     if st.button("💾 حفظ وترحيل الفاتورة مع كافة بنودها"):
-        if not inv_id.strip():
-            st.error("يرجى إدخال رقم الفاتورة.")
-        elif final_amount <= 0:
-            st.error("يرجى التأكد من إدخال مبالغ أكبر من الصفر.")
+        if not inv_id.strip() or final_amount <= 0:
+            st.error("يرجى إدخال رقم الفاتورة ومبلغ أكبر من الصفر.")
         else:
             p_id = int(projects_df.loc[projects_df['name'] == proj_name, 'id'].values[0])
             s_id = int(stakeholders_df.loc[stakeholders_df['name'] == party_name, 'id'].values[0])
             v_id = int(vaults_df.loc[vaults_df['currency'] == currency, 'id'].values[0])
-            
             direction = 'IN' if ('مقبوضات' in tx_type or 'ايراد' in tx_type) else 'OUT'
             amt_usd = final_amount if currency == 'USD' else (final_amount / rate if rate > 0 else 0)
 
@@ -1617,7 +1552,7 @@ elif menu == "➕ إضافة فاتورة وحركة متعددة البنود":
                         """, (it["name"], it["cat"], it["qty"], it["price"], currency))
 
                 conn.commit()
-                st.success(f"تم ترحيل الفاتورة {inv_id} وبنودها بنجاح وتحديث أرصدة الخزينة والمستودع!")
+                st.success(f"تم ترحيل الفاتورة {inv_id} بنجاح!")
                 st.rerun()
             except Exception as e:
                 conn.rollback()
@@ -1626,13 +1561,13 @@ elif menu == "➕ إضافة فاتورة وحركة متعددة البنود":
                 cur.close()
 
 # ====================================================
-# 12. تعديل / إلغاء حركة مالية (Admin فقط)
+# 12. تعديل / إلغاء حركة مالية
 # ====================================================
 elif menu == "✏️ تعديل / إلغاء حركة مالية":
     st.subheader("✏️ تعديل بيانات حركة مالية أو إلغاؤها")
     
     tx_list = pd.read_sql("SELECT id FROM transactions ORDER BY tx_date DESC, id DESC;", conn)['id'].tolist()
-    selected_tx_id = st.selectbox("اختر رقم الفاتورة / السند المطلوب", [""] + tx_list)
+    selected_tx_id = st.selectbox("اختر رقم الفاتورة / السند", [""] + tx_list)
 
     if selected_tx_id:
         cur = conn.cursor()
@@ -1644,16 +1579,15 @@ elif menu == "✏️ تعديل / إلغاء حركة مالية":
 
         st.markdown("---")
         col_ed1, col_ed2 = st.columns([2, 1])
-
         with col_ed1:
-            st.markdown(f"#### 📝 تعديل الفاتورة `{selected_tx_id}`")
+            st.markdown(f"#### 📝 تعديل السند `{selected_tx_id}`")
             with st.form("edit_tx_form"):
                 e_date = st.date_input("التاريخ", tx_data['tx_date'])
                 e_amount = st.number_input("المبلغ", min_value=0.0, value=float(tx_data['amount']))
                 e_rate = st.number_input("سعر الصرف", min_value=1.0, value=float(tx_data['exchange_rate']))
-                e_notes = st.text_area("البيان والملاحظات", value=tx_data['description'] if tx_data['description'] else "")
+                e_notes = st.text_area("البيان", value=tx_data['description'] if tx_data['description'] else "")
                 
-                if st.form_submit_button("💾 حفظ التعديلات وتحديث الأرصدة"):
+                if st.form_submit_button("💾 حفظ التعديلات"):
                     amt_usd = e_amount if tx_data['currency'] == 'USD' else (e_amount / e_rate if e_rate > 0 else 0)
                     cur = conn.cursor()
                     cur.execute("""
@@ -1663,18 +1597,17 @@ elif menu == "✏️ تعديل / إلغاء حركة مالية":
                     """, (e_date, e_amount, e_rate, amt_usd, e_notes, selected_tx_id))
                     conn.commit()
                     cur.close()
-                    st.success(f"تم تحديث بيانات الفاتورة {selected_tx_id} بنجاح!")
+                    st.success("تم تحديث البيانات بنجاح!")
                     st.rerun()
 
         with col_ed2:
-            st.markdown("#### 🗑️ حذف الفاتورة نهائياً")
-            st.warning("حذف الفاتورة سيقوم بإلغاء أثرها المالي فوراً وحذف بنودها.")
+            st.markdown("#### 🗑️ حذف الفاتورة")
             if st.button("تأكيد الحذف نهائياً", key="del_btn"):
                 cur = conn.cursor()
                 cur.execute("DELETE FROM transactions WHERE id = %s;", (selected_tx_id,))
                 conn.commit()
                 cur.close()
-                st.success(f"تم حذف الفاتورة {selected_tx_id} بنجاح.")
+                st.success("تم الحذف بنجاح!")
                 st.rerun()
 
 # ====================================================
@@ -1688,7 +1621,7 @@ elif menu == "🏢 حسابات المشاريع والمستثمرين":
             p.name AS "المشروع",
             p.status AS "الحالة",
             p.management_fee_rate * 100 AS "أتعاب الإدارة %",
-            COALESCE(SUM(CASE WHEN t.direction = 'OUT' THEN t.amount_usd ELSE 0 END), 0) AS "تكاليف التنفيذ ومواد المخزون ($)",
+            COALESCE(SUM(CASE WHEN t.direction = 'OUT' THEN t.amount_usd ELSE 0 END), 0) AS "تكاليف التنفيذ ($)",
             ROUND(COALESCE(SUM(CASE WHEN t.direction = 'OUT' THEN t.amount_usd ELSE 0 END), 0) * p.management_fee_rate, 2) AS "أتعاب الإدارة المستحقة ($)",
             ROUND(COALESCE(SUM(CASE WHEN t.direction = 'OUT' THEN t.amount_usd ELSE 0 END), 0) * (1 + p.management_fee_rate), 2) AS "إجمالي المطالبة ($)",
             COALESCE(SUM(CASE WHEN t.direction = 'IN' THEN t.amount_usd ELSE 0 END), 0) AS "المقبوض من المستثمر ($)",
@@ -1702,10 +1635,10 @@ elif menu == "🏢 حسابات المشاريع والمستثمرين":
         GROUP BY p.id, p.name, p.status, p.management_fee_rate;
     """
     df_calc = pd.read_sql(query_projects_calc, conn)
-    st.dataframe(df_calc, width='stretch')
+    st.dataframe(df_calc, use_container_width=True)
 
 # ====================================================
-# 14. الإدارة والتشغيل والتعاقدات (Admin فقط)
+# 14. الإدارة والتشغيل والتعاقدات
 # ====================================================
 elif menu == "⚙️ الإدارة والتشغيل والتعاقدات":
     tab_emp, tab_proj, tab_inv = st.tabs([
@@ -1715,60 +1648,57 @@ elif menu == "⚙️ الإدارة والتشغيل والتعاقدات":
     ])
 
     with tab_emp:
-        st.markdown("### 📋 سجل الموظفين والرواتب")
         df_emp = pd.read_sql("SELECT id, name AS \"اسم الموظف\", role AS \"المسمى\", salary_amount AS \"الراتب\", salary_currency AS \"العملة\", status AS \"الحالة\", phone AS \"الهاتف\" FROM stakeholders WHERE role IN ('Employee', 'Partner') ORDER BY id ASC;", conn)
-        st.dataframe(df_emp, width='stretch')
+        st.dataframe(df_emp, use_container_width=True)
 
         col_e1, col_e2 = st.columns(2)
         with col_e1:
-            st.markdown("#### ➕ إضافة موظف جديد")
+            st.markdown("#### ➕ إضافة موظف")
             with st.form("add_emp_form", clear_on_submit=True):
-                e_name = st.text_input("اسم الموظف الثلاثي")
-                e_phone = st.text_input("رقم الهاتف")
-                e_salary = st.number_input("الراتب الشهري المتفق عليه", min_value=0.0, step=100.0)
+                e_name = st.text_input("اسم الموظف")
+                e_phone = st.text_input("الهاتف")
+                e_salary = st.number_input("الراتب", min_value=0.0, step=100.0)
                 e_curr = st.selectbox("عملة الراتب", ["USD", "SYP"], key="emp_curr")
-                if st.form_submit_button("إضافة الموظف للشركة"):
+                if st.form_submit_button("إضافة"):
                     if e_name.strip():
                         cur = conn.cursor()
                         cur.execute("""
                             INSERT INTO stakeholders (name, role, phone, salary_amount, salary_currency, status)
                             VALUES (%s, 'Employee', %s, %s, %s, 'نشط')
-                            ON CONFLICT (name) DO UPDATE SET 
-                                role = 'Employee', salary_amount = EXCLUDED.salary_amount, status = 'نشط';
+                            ON CONFLICT (name) DO UPDATE SET salary_amount = EXCLUDED.salary_amount, status = 'نشط';
                         """, (e_name.strip(), e_phone.strip(), e_salary, e_curr))
                         conn.commit()
                         cur.close()
-                        st.success(f"تم تسجيل الموظف {e_name} بنجاح.")
+                        st.success("تم تسجيل الموظف!")
                         st.rerun()
 
         with col_e2:
-            st.markdown("#### 🛑 تعديل حالة موظف (فصل / إيقاف)")
+            st.markdown("#### 🛑 تعديل حالة موظف")
             with st.form("status_emp_form"):
                 active_emps = pd.read_sql("SELECT id, name FROM stakeholders WHERE role IN ('Employee', 'Partner');", conn)
                 if not active_emps.empty:
-                    selected_emp = st.selectbox("اختر الموظف", active_emps['name'].tolist())
+                    selected_emp = st.selectbox("الموظف", active_emps['name'].tolist())
                     new_status = st.selectbox("الحالة الجديدة", ["نشط", "مفصول", "مستقيل"])
-                    if st.form_submit_button("تحديث حالة الموظف"):
+                    if st.form_submit_button("تحديث"):
                         cur = conn.cursor()
-                        cur.execute("UPDATE stakeholders SET status = %s, termination_date = CURRENT_DATE WHERE name = %s;", (new_status, selected_emp))
+                        cur.execute("UPDATE stakeholders SET status = %s WHERE name = %s;", (new_status, selected_emp))
                         conn.commit()
                         cur.close()
-                        st.success(f"تم تغيير حالة {selected_emp} إلى {new_status}")
+                        st.success("تم التحديث!")
                         st.rerun()
 
     with tab_proj:
-        st.markdown("### 🏗️ قائمة المشاريع النشطة والمنتهية")
-        df_p_all = pd.read_sql("SELECT id, name AS \"اسم المشروع\", project_type AS \"النوع\", status AS \"الحالة\", management_fee_rate * 100 AS \"نسبة الإدارة %\", created_at::date AS \"تاريخ البدء\", end_date AS \"تاريخ الإنهاء\" FROM projects ORDER BY id DESC;", conn)
-        st.dataframe(df_p_all, width='stretch')
+        df_p_all = pd.read_sql("SELECT id, name AS \"المشروع\", project_type AS \"النوع\", status AS \"الحالة\", management_fee_rate * 100 AS \"نسبة الإدارة %\" FROM projects ORDER BY id DESC;", conn)
+        st.dataframe(df_p_all, use_container_width=True)
 
         col_p1, col_p2 = st.columns(2)
         with col_p1:
-            st.markdown("#### ➕ إنشاء مشروع جديد")
+            st.markdown("#### ➕ مشروع جديد")
             with st.form("add_project_form", clear_on_submit=True):
-                p_name = st.text_input("اسم المشروع (مثال: فيلا النخيل)")
+                p_name = st.text_input("اسم المشروع")
                 p_type = st.selectbox("طبيعة المشروع", ["Finishing", "Development", "Internal"])
                 p_fee = st.number_input("نسبة أتعاب الإدارة %", min_value=0.0, max_value=100.0, value=15.0)
-                if st.form_submit_button("اعتماد وفتح المشروع"):
+                if st.form_submit_button("فتح المشروع"):
                     if p_name.strip():
                         cur = conn.cursor()
                         cur.execute("""
@@ -1778,37 +1708,34 @@ elif menu == "⚙️ الإدارة والتشغيل والتعاقدات":
                         """, (p_name.strip(), p_type, p_fee / 100.0))
                         conn.commit()
                         cur.close()
-                        st.success(f"تم إنشاء المشروع {p_name} بنجاح!")
+                        st.success("تم إنشاء المشروع!")
                         st.rerun()
 
         with col_p2:
-            st.markdown("#### 🏁 إنهاء وإغلاق مشروع مكتمل")
+            st.markdown("#### 🏁 إغلاق مشروع")
             with st.form("close_project_form"):
                 active_projs = pd.read_sql("SELECT id, name FROM projects WHERE status = 'Active' AND project_type != 'Internal';", conn)
                 if not active_projs.empty:
-                    p_to_close = st.selectbox("اختر المشروع المراد إغلاقه", active_projs['name'].tolist())
-                    if st.form_submit_button("إغلاق المشروع واعتباره مكتملاً"):
+                    p_to_close = st.selectbox("المشروع المطلوب إغلاقه", active_projs['name'].tolist())
+                    if st.form_submit_button("إغلاق"):
                         cur = conn.cursor()
                         cur.execute("UPDATE projects SET status = 'Completed', end_date = CURRENT_DATE WHERE name = %s;", (p_to_close,))
                         conn.commit()
                         cur.close()
-                        st.success(f"تم توثيق المشروع {p_to_close} كمشروع مكتمل.")
+                        st.success("تم إغلاق المشروع بنجاح!")
                         st.rerun()
-                else:
-                    st.info("لا توجد مشاريع نشطة للإغلاق.")
 
     with tab_inv:
-        st.markdown("### 💼 سجل المستثمرين والعقود")
         df_inv_all = pd.read_sql("SELECT id, name AS \"اسم المستثمر\", status AS \"حالة العقد\", phone AS \"رقم الهاتف\" FROM stakeholders WHERE role = 'Investor' ORDER BY id DESC;", conn)
-        st.dataframe(df_inv_all, width='stretch')
+        st.dataframe(df_inv_all, use_container_width=True)
 
         col_i1, col_i2 = st.columns(2)
         with col_i1:
-            st.markdown("#### ➕ إضافة مستثمر جديد")
+            st.markdown("#### ➕ إضافة مستثمر")
             with st.form("add_inv_form", clear_on_submit=True):
                 i_name = st.text_input("اسم المستثمر")
-                i_phone = st.text_input("رقم التواصل")
-                if st.form_submit_button("تسجيل المستثمر"):
+                i_phone = st.text_input("رقم الهاتف")
+                if st.form_submit_button("تسجيل"):
                     if i_name.strip():
                         cur = conn.cursor()
                         cur.execute("""
@@ -1818,7 +1745,7 @@ elif menu == "⚙️ الإدارة والتشغيل والتعاقدات":
                         """, (i_name.strip(), i_phone.strip()))
                         conn.commit()
                         cur.close()
-                        st.success(f"تم تسجيل المستثمر {i_name} بنجاح.")
+                        st.success("تم تسجيل المستثمر!")
                         st.rerun()
 
         with col_i2:
@@ -1826,15 +1753,13 @@ elif menu == "⚙️ الإدارة والتشغيل والتعاقدات":
             with st.form("term_inv_form"):
                 active_invs = pd.read_sql("SELECT id, name FROM stakeholders WHERE role = 'Investor' AND status = 'نشط';", conn)
                 if not active_invs.empty:
-                    i_to_term = st.selectbox("اختر المستثمر لإنهاء عقده", active_invs['name'].tolist())
+                    i_to_term = st.selectbox("المستثمر", active_invs['name'].tolist())
                     if st.form_submit_button("إنهاء العقد"):
                         cur = conn.cursor()
                         cur.execute("UPDATE stakeholders SET status = 'عقد منتهي', termination_date = CURRENT_DATE WHERE name = %s;", (i_to_term,))
                         conn.commit()
                         cur.close()
-                        st.success(f"تم إنهاء عقد المستثمر {i_to_term}.")
+                        st.success("تم إنهاء العقد.")
                         st.rerun()
-                else:
-                    st.info("لا يوجد مستثمرون نشطون.")
 
 conn.close()
