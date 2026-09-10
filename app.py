@@ -225,7 +225,7 @@ def generate_receipt_pdf(tx_data, items_data):
     buffer.seek(0)
     return buffer.getvalue()
 
-# 3. الهوية البصرية وضبط الجداول لعرض التواريخ والبيانات الإنجليزية بوضوح تام
+# 3. الهوية البصرية وإعداد الجداول بشكل طبيعي وواضح جداً
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
@@ -244,13 +244,9 @@ st.markdown("""
         text-align: right !important;
     }
 
-    /* ضمان ظهور محتوى خلايا الجداول والتواريخ والأرقام بوضوح تام */
+    /* ضمان وضوح وعرض كافة خلايا الجداول والتواريخ والأرقام */
     [data-testid="stDataFrame"] {
-        direction: ltr !important;
-        text-align: left !important;
-    }
-    [data-testid="stDataFrame"] table {
-        width: 100% !important;
+        direction: rtl !important;
     }
     
     [data-testid="stToolbar"],
