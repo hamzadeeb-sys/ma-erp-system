@@ -190,29 +190,21 @@ def generate_investor_statement_pdf(investor_name, proj_name, stats, tx_rows):
     buffer.seek(0)
     return buffer.getvalue()
 
-# 3. الهوية البصرية المنضبطة تماماً مع نظام Streamlit
+# 3. الهوية البصرية المعتمدة (مع الحفاظ على خط الأيقونات الأصلي)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
     
-    /* تطبيق الخط فقط مع ترك نظام تموضع Streamlit سليم */
-    * {
+    body, p, label, h1, h2, h3, h4, h5, button, input, select, textarea, .stMarkdown {
         font-family: 'Cairo', sans-serif !important;
-    }
-
-    /* حماية خط الأيقونات وأسهم التحكم */
-    [data-testid="stIconMaterial"], 
-    .material-symbols-rounded, 
-    button[data-testid="stSidebarCollapseButton"] *,
-    button[data-testid="collapsedControl"] * {
-        font-family: 'Material Symbols Rounded' !important;
-    }
-
-    /* ضبط اتجاه المحتوى الداخلي فقط */
-    .block-container {
         direction: rtl !important;
         text-align: right !important;
-        padding-top: 2rem !important;
+    }
+
+    /* حماية خط الأيقونات من التداخل */
+    span[data-testid="stIconMaterial"], .material-symbols-rounded, i, svg {
+        font-family: 'Material Symbols Rounded' !important;
+        direction: ltr !important;
     }
 
     .stApp {
@@ -223,18 +215,22 @@ st.markdown("""
         display: none !important;
     }
 
-    /* ألوان وقوائم السايد بار */
     section[data-testid="stSidebar"] {
         background-color: #0F4733 !important;
         border-left: 2px solid #BE9D5F;
-        direction: rtl !important;
-        text-align: right !important;
     }
     section[data-testid="stSidebar"] * {
         color: #FFFFFF !important;
     }
 
-    /* كروت المؤشرات المالية */
+    input, textarea, select, div[data-baseweb="select"] > div {
+        background-color: #FFFFFF !important;
+        color: #44494B !important;
+        border: 1.5px solid #A29F98 !important;
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+    }
+
     .metric-card {
         background: #FFFFFF;
         border-radius: 12px;
@@ -261,17 +257,6 @@ st.markdown("""
         color: #BE9D5F;
         font-size: 2rem;
         font-weight: 900;
-    }
-
-    /* الحقول والأزرار */
-    input, textarea, select, div[data-baseweb="select"] > div {
-        background-color: #FFFFFF !important;
-        color: #44494B !important;
-        border: 1.5px solid #A29F98 !important;
-        border-radius: 8px !important;
-        font-weight: 600 !important;
-        direction: rtl !important;
-        text-align: right !important;
     }
 
     .stButton > button, .stDownloadButton > button {
@@ -425,21 +410,18 @@ with st.sidebar:
         st.rerun()
 
 # ----------------------------------------------------
-# ترويسة الصفحة الرسمية المستقرة
+# ترويسة الصفحة الرسمية
 # ----------------------------------------------------
-col_title, col_logo = st.columns([5, 1])
-with col_title:
-    st.markdown("""
-        <div style="direction: rtl; text-align: right;">
+logo_header_img = f'<img src="data:image/png;base64,{logo_b64}" style="height: 50px;">' if logo_b64 else ''
+st.markdown(f"""
+    <div style="display: flex; align-items: center; gap: 15px; border-bottom: 2px solid #BE9D5F; padding-bottom: 12px; margin-bottom: 25px; direction: rtl;">
+        {logo_header_img}
+        <div>
             <h2 style="margin: 0; padding: 0; font-size: 1.7rem; color: #0F4733; font-weight: 800;">منظومة الإدارة والرقابة المالية</h2>
             <div style="color: #BE9D5F; font-size: 0.9rem; font-weight: 700; margin-top: 3px;">MA Real Estate Development &amp; Contracting</div>
         </div>
-    """, unsafe_allow_html=True)
-with col_logo:
-    if logo_b64:
-        st.markdown(f'<div style="text-align: left;"><img src="data:image/png;base64,{logo_b64}" style="height: 48px;"></div>', unsafe_allow_html=True)
-
-st.markdown("<hr style='border: 1px solid #BE9D5F; margin-top: 8px; margin-bottom: 25px;'>", unsafe_allow_html=True)
+    </div>
+""", unsafe_allow_html=True)
 
 conn = get_connection()
 
