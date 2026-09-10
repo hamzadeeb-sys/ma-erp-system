@@ -37,6 +37,63 @@ def get_connection():
         password=DB_PASS
     )
 
+def ensure_database_schema():
+    """فحص وضمان وجود كافة الجداول والأعمدة تلقائياً لمنع أي أخطاء مفقودة"""
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS app_users (
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(100) UNIQUE NOT NULL,
+                password VARCHAR(255) NOT NULL,
+                full_name VARCHAR(255) NOT NULL,
+                role VARCHAR(50) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            ALTER TABLE app_users ADD COLUMN IF NOT EXISTS stakeholder_id INT;
+            ALTER TABLE app_users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+            
+            ALTER TABLE stakeholders ADD COLUMN IF NOT EXISTS salary_type VARCHAR(50) DEFAULT 'monthly_standard';
+            ALTER TABLE stakeholders ADD COLUMN IF NOT EXISTS salary_amount NUMERIC(15,2) DEFAULT 0;
+            ALTER TABLE stakeholders ADD COLUMN IF NOT EXISTS salary_currency VARCHAR(10) DEFAULT 'USD';
+
+            CREATE TABLE IF NOT EXISTS office_appointments (
+                id SERIAL PRIMARY KEY,
+                visitor_name VARCHAR(255) NOT NULL,
+                visitor_phone VARCHAR(100),
+                visit_type VARCHAR(50) NOT NULL,
+                visit_date DATE NOT NULL,
+                visit_time TIME,
+                host_person VARCHAR(255),
+                purpose VARCHAR(255),
+                status VARCHAR(50) DEFAULT 'مكتملة',
+                notes TEXT,
+                recorded_by VARCHAR(100),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            INSERT INTO app_users (username, password, full_name, role, is_active)
+            VALUES 
+                ('hamza', 'hamza123', 'حمزة ديب', 'Admin', TRUE),
+                ('mosab', 'mosab123', 'مصعب المصري', 'Admin', TRUE),
+                ('samer', 'samer123', 'سامر ديب', 'Partner', TRUE),
+                ('manager', 'admin123', 'المدير العام', 'Manager', TRUE),
+                ('accountant', 'acc123', 'محاسب الشركة', 'Accountant', TRUE),
+                ('secretary', 'sec123', 'سكرتارية الاستقبال', 'Secretary', TRUE)
+            ON CONFLICT (username) DO UPDATE SET 
+                is_active = TRUE,
+                role = EXCLUDED.role;
+        """)
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        pass
+
+# تشغيل فحص وترقية الجداول تلقائياً عند بدء التشغيل
+ensure_database_schema()
+
 def get_base64_image(image_path):
     if image_path and os.path.exists(image_path):
         with open(image_path, "rb") as img_file:
@@ -234,60 +291,15 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ----------------------------------------------------
-# تسجيل الدخول وتحديث هيكل الجداول تلقائياً
+# تسجيل الدخول
 # ----------------------------------------------------
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
     st.session_state.user_info = None
 
-def init_and_login_user(username, password):
+def login_user(username, password):
     conn = get_connection()
     cur = conn.cursor()
-    
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS app_users (
-            id SERIAL PRIMARY KEY,
-            username VARCHAR(100) UNIQUE NOT NULL,
-            password VARCHAR(255) NOT NULL,
-            full_name VARCHAR(255) NOT NULL,
-            role VARCHAR(50) NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        ALTER TABLE app_users ADD COLUMN IF NOT EXISTS stakeholder_id INT;
-        ALTER TABLE app_users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
-        ALTER TABLE stakeholders ADD COLUMN IF NOT EXISTS salary_type VARCHAR(50) DEFAULT 'monthly_standard';
-        ALTER TABLE stakeholders ADD COLUMN IF NOT EXISTS salary_amount NUMERIC(15,2) DEFAULT 0;
-        ALTER TABLE stakeholders ADD COLUMN IF NOT EXISTS salary_currency VARCHAR(10) DEFAULT 'USD';
-
-        CREATE TABLE IF NOT EXISTS office_appointments (
-            id SERIAL PRIMARY KEY,
-            visitor_name VARCHAR(255) NOT NULL,
-            visitor_phone VARCHAR(100),
-            visit_type VARCHAR(50) NOT NULL,
-            visit_date DATE NOT NULL,
-            visit_time TIME,
-            host_person VARCHAR(255),
-            purpose VARCHAR(255),
-            status VARCHAR(50) DEFAULT 'مكتملة',
-            notes TEXT,
-            recorded_by VARCHAR(100),
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-
-        INSERT INTO app_users (username, password, full_name, role, is_active)
-        VALUES 
-            ('hamza', 'hamza123', 'حمزة ديب', 'Admin', TRUE),
-            ('mosab', 'mosab123', 'مصعب المصري', 'Admin', TRUE),
-            ('samer', 'samer123', 'سامر ديب', 'Partner', TRUE),
-            ('manager', 'admin123', 'المدير العام', 'Manager', TRUE),
-            ('accountant', 'acc123', 'محاسب الشركة', 'Accountant', TRUE),
-            ('secretary', 'sec123', 'سكرتارية الاستقبال', 'Secretary', TRUE)
-        ON CONFLICT (username) DO UPDATE SET 
-            is_active = TRUE,
-            role = EXCLUDED.role;
-    """)
-    conn.commit()
-
     cur.execute("""
         SELECT id, username, full_name, role, stakeholder_id, COALESCE(is_active, TRUE) 
         FROM app_users 
@@ -318,7 +330,7 @@ if not st.session_state.authenticated:
             submitted = st.form_submit_button("تسجيل الدخول")
             if submitted:
                 if user_input and pass_input:
-                    user_data = init_and_login_user(user_input, pass_input)
+                    user_data = login_user(user_input, pass_input)
                     if user_data:
                         if not user_data[5]:
                             st.error("⚠️ هذا الحساب مجمد حالياً، يرجى مراجعة إدارة النظام.")
@@ -665,7 +677,7 @@ elif menu == "⏱️ جدول دوامات وساعات العمل":
             st.dataframe(pd.read_sql("SELECT s.name AS \"الموظف\", COUNT(CASE WHEN a.status = 'حاضر' THEN 1 END) AS \"أيام الحضور\", COUNT(CASE WHEN a.status = 'غياب' THEN 1 END) AS \"أيام الغياب\", COALESCE(SUM(a.total_hours), 0) AS \"إجمالي الساعات\" FROM stakeholders s LEFT JOIN employee_attendance a ON s.id = a.employee_id WHERE s.role IN ('Employee', 'Partner') GROUP BY s.id, s.name;", conn), use_container_width=True)
 
 # ====================================================
-# 5. كشف حساب الموظف الذاتي (الشامل لكل الفواتير والرواتب والسلف)
+# 5. كشف حساب الموظف الذاتي
 # ====================================================
 elif menu == "👤 كشف حسابي ودوامي الذاتي":
     st.subheader(f"👤 ملف وحساب الموظف: {current_user['full_name']}")
@@ -1098,13 +1110,12 @@ elif menu == "➕ إضافة فاتورة وحركة متعددة البنود":
                 st.rerun()
 
 # ====================================================
-# 14. تعديل / إلغاء حركة مالية (وربط الحركات القديمة بالأطراف الذكي)
+# 14. تعديل / إلغاء حركة مالية
 # ====================================================
 elif menu == "✏️ تعديل / إلغاء حركة مالية":
     if user_role in ["Admin", "Accountant"]:
         st.subheader("✏️ تعديل أو حذف سند مالي (أو ربط السندات القديمة بالموظفين والأطراف)")
         
-        # إضافة زر الربط الذكي التلقائي
         if st.button("🤖 تشغيل الربط الذكي التلقائي للسندات القديمة عبر النصوص"):
             cur = conn.cursor()
             cur.execute("SELECT id, description, stakeholder_id FROM transactions WHERE stakeholder_id IS NULL OR stakeholder_id = 1;")
@@ -1122,7 +1133,7 @@ elif menu == "✏️ تعديل / إلغاء حركة مالية":
                             break
             conn.commit()
             cur.close()
-            st.success(f"تم بنجاح ربط {linked_count} سنداً قديدماً بالموظفين والأطراف تلقائياً بناءً على أسمائهم المكتوبة في البيان!")
+            st.success(f"تم بنجاح ربط {linked_count} سنداً قديماً بالموظفين والأطراف تلقائياً بناءً على أسمائهم المكتوبة في البيان!")
             st.rerun()
 
         st.markdown("<br>", unsafe_allow_html=True)
