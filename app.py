@@ -256,6 +256,8 @@ def init_and_login_user(username, password):
         ALTER TABLE app_users ADD COLUMN IF NOT EXISTS stakeholder_id INT;
         ALTER TABLE app_users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
         ALTER TABLE stakeholders ADD COLUMN IF NOT EXISTS salary_type VARCHAR(50) DEFAULT 'monthly_standard';
+        ALTER TABLE stakeholders ADD COLUMN IF NOT EXISTS salary_amount NUMERIC(15,2) DEFAULT 0;
+        ALTER TABLE stakeholders ADD COLUMN IF NOT EXISTS salary_currency VARCHAR(10) DEFAULT 'USD';
 
         CREATE TABLE IF NOT EXISTS office_appointments (
             id SERIAL PRIMARY KEY,
@@ -877,7 +879,7 @@ elif menu == "🖨️ طباعة السندات وتصدير التقارير":
         st.download_button("📥 تنزيل سجل الحركات Excel", data=to_excel_download_link(df_all_tx, "transactions.xlsx"), file_name="MA_Transactions.xlsx")
 
 # ====================================================
-# 9. مسيرات الرواتب الشهرية (مع دعم طريقة احتساب الراتب)
+# 9. مسيرات الرواتب الشهرية
 # ====================================================
 elif menu == "💳 مسيرات الرواتب الشهرية":
     st.subheader("💳 احتساب وصرف مسيرات الرواتب وخصم السلف")
@@ -892,7 +894,6 @@ elif menu == "💳 مسيرات الرواتب الشهرية":
         curr_s = str(emp_row['salary_currency'])
         sal_type = str(emp_row.get('salary_type', 'monthly_standard'))
 
-        # تحديد المعاملات بحسب نوع الراتب (شهري قياسي 30، شهري بدون جمعة 26، أو أسبوعي 24)
         if sal_type == 'monthly_ex_friday':
             daily_div = 26.0
             hourly_div = 208.0
@@ -983,7 +984,7 @@ elif menu == "📦 إدارة المخزون ومواد المشاريع":
                         st.rerun()
 
 # ====================================================
-# 11. دليل وتعديل الأطراف والرواتب الثابتة وطريقة الاحتساب
+# 11. دليل وتعديل بيانات الأطراف
 # ====================================================
 elif menu == "👥 دليل وتعديل بيانات الأطراف":
     st.subheader("👥 دليل وتعديل بيانات الأطراف والموظفين")
@@ -1097,13 +1098,34 @@ elif menu == "➕ إضافة فاتورة وحركة متعددة البنود":
                 st.rerun()
 
 # ====================================================
-# 14. تعديل / إلغاء حركة مالية
+# 14. تعديل / إلغاء حركة مالية (وربط الحركات القديمة بالأطراف الذكي)
 # ====================================================
 elif menu == "✏️ تعديل / إلغاء حركة مالية":
     if user_role in ["Admin", "Accountant"]:
         st.subheader("✏️ تعديل أو حذف سند مالي (أو ربط السندات القديمة بالموظفين والأطراف)")
-        st.caption("إذا كانت لديك سندات قديمة غير مرتبطة بمستفيد، يمكنك اختيار السند هنا وتعديل الطرف المرتبط به:")
         
+        # إضافة زر الربط الذكي التلقائي
+        if st.button("🤖 تشغيل الربط الذكي التلقائي للسندات القديمة عبر النصوص"):
+            cur = conn.cursor()
+            cur.execute("SELECT id, description, stakeholder_id FROM transactions WHERE stakeholder_id IS NULL OR stakeholder_id = 1;")
+            unlinked = cur.fetchall()
+            cur.execute("SELECT id, name FROM stakeholders;")
+            stks = cur.fetchall()
+            
+            linked_count = 0
+            for tx_id, desc, stk_id in unlinked:
+                if desc:
+                    for s_id, s_name in stks:
+                        if s_name in str(desc):
+                            cur.execute("UPDATE transactions SET stakeholder_id = %s WHERE id = %s;", (s_id, tx_id))
+                            linked_count += 1
+                            break
+            conn.commit()
+            cur.close()
+            st.success(f"تم بنجاح ربط {linked_count} سنداً قديدماً بالموظفين والأطراف تلقائياً بناءً على أسمائهم المكتوبة في البيان!")
+            st.rerun()
+
+        st.markdown("<br>", unsafe_allow_html=True)
         tx_list_full = pd.read_sql("""
             SELECT t.id, t.tx_date, t.amount, t.currency, COALESCE(s.name, 'غير مرتبطة ⚠️') AS stakeholder 
             FROM transactions t 
@@ -1113,7 +1135,7 @@ elif menu == "✏️ تعديل / إلغاء حركة مالية":
         
         if not tx_list_full.empty:
             tx_options_str = [f"{r['id']} | {r['tx_date']} | {r['amount']} {r['currency']} | الطرف: {r['stakeholder']}" for _, r in tx_list_full.iterrows()]
-            chosen_str = st.selectbox("اختر السند المطلوب تعديله أو ربطه:", [""] + tx_options_str)
+            chosen_str = st.selectbox("اختر السند المطلوب تعديله أو ربطه يدوياً:", [""] + tx_options_str)
             
             if chosen_str:
                 selected_tx_id = chosen_str.split(" | ")[0]
