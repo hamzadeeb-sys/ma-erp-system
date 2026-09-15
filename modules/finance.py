@@ -29,7 +29,7 @@ def render_vault_transfers(current_user):
                 s_amt = st.number_input("المبلغ المحوّل", min_value=0.0, step=50.0)
                 actual_rate = st.number_input("سعر الصرف الفعلي للعملية", min_value=1.0, value=131.0, step=0.5)
             with ct3:
-                benchmark_rate = st.number_input("سعر الصرف الدفتري المرجعي (المعياري)", min_value=1.0, value=130.0, step=0.5)
+                benchmark_rate = st.number_input("سعر الصرف الدفتري المرجعي", min_value=1.0, value=130.0, step=0.5)
                 calc_res = s_amt * actual_rate if "من دولار" in tx_dir else (s_amt / actual_rate if actual_rate > 0 else 0)
                 st.markdown(f"**المقابل المستلم:** {calc_res:,.2f}")
                 notes = st.text_input("البيان / مكتب الصرافة", value="صرافة داخلية بين الصناديق")
@@ -45,12 +45,9 @@ def render_vault_transfers(current_user):
                     v_dst = 2 if to_c == "SYP" else 1
                     amt_usd = s_amt if from_c == "USD" else calc_res
                     
-                    # احتساب فروقات الصرف المحققة (FX Gain/Loss)
                     if from_c == "USD":
-                        # بيع دولار: إذا كان سعر الصرف الفعلي أكبر من المعياري فهو ربح صرف
                         fx_diff = (actual_rate - benchmark_rate) * s_amt
                     else:
-                        # شراء دولار: إذا كان السعر الفعلي أقل من المعياري فهو ربح صرف
                         fx_diff = (benchmark_rate - actual_rate) * calc_res
 
                     with get_db_cursor(commit=True) as (cur, _):
@@ -65,11 +62,11 @@ def render_vault_transfers(current_user):
                         """, (f"TRF-I-{ts}", t_date, v_dst, calc_res, to_c, actual_rate, amt_usd, notes, fx_diff))
                     
                     if fx_diff > 0:
-                        st.success(f"تم ترحيل القيدين بنجاح. تم تحقيق ربح صرف بمقدار: {fx_diff:,.2f} SYP")
+                        st.success(f"تم ترحيل القيدين بنجاح. أرباح فروقات صرف: {fx_diff:,.2f} SYP")
                     elif fx_diff < 0:
-                        st.warning(f"تم ترحيل القيدين بنجاح. تم تسجيل خسارة صرف بمقدار: {abs(fx_diff):,.2f} SYP")
+                        st.warning(f"تم ترحيل القيدين بنجاح. خسائر فروقات صرف: {abs(fx_diff):,.2f} SYP")
                     else:
-                        st.success("تم ترحيل قيدي الصرافة بنجاح بسعر التعادل الدفتري.")
+                        st.success("تم ترحيل قيدي الصرافة بنجاح.")
                     st.rerun()
                 else:
                     st.error("المبلغ المطلوب غير متوفر في رصيد الصندوق المصدر.")
@@ -143,6 +140,7 @@ def render_transactions_ledger():
                COALESCE(ii.unit_price::text, '-') AS "السعر الإفرادي",
                COALESCE(ii.total_price, t.amount) AS "المبلغ",
                COALESCE(ii.currency, t.currency) AS "العملة",
+               CASE WHEN ii.affects_inventory THEN 'نعم 📦' ELSE 'لا' END AS "خصم مخزني",
                t.amount_usd AS "إجمالي الفاتورة ($)",
                t.payment_method AS "طريقة الدفع"
         FROM transactions t
@@ -161,10 +159,12 @@ def render_add_invoice(current_user):
         st.subheader("📄 تسجيل فاتورة / حركة مالية")
         projs = run_query("SELECT id, name FROM projects WHERE project_type != 'Factory' ORDER BY name;")
         parties = run_query("SELECT id, name FROM stakeholders ORDER BY name;")
-        inventory_items_df = run_query("SELECT item_name, quantity_on_hand, avg_unit_cost FROM inventory_stock;")
-        stock_item_names = set(inventory_items_df['item_name'].tolist()) if not inventory_items_df.empty else set()
+        
+        # استعلام المخزون المتاح لإدراجه كقائمة منسدلة داخل المحرر
+        df_available_stock = run_query("SELECT item_name, quantity_on_hand, avg_unit_cost FROM inventory_stock ORDER BY item_name;")
+        stock_item_names = df_available_stock['item_name'].tolist() if not df_available_stock.empty else []
+        
         auto_inv = get_next_invoice_id()
-
         mode = st.radio("نوع الإدخال:", ["سند مالي مباشر (بدون بنود تفصيلية)", "فاتورة تفصيلية متعددة البنود"])
 
         if "بدون بنود" in mode:
@@ -217,12 +217,12 @@ def render_add_invoice(current_user):
             p_list = parties['name'].tolist()
 
             default_df = pd.DataFrame([{
-                "اسم البند": "", 
+                "اسم البند": stock_item_names[0] if stock_item_names else "", 
                 "التصنيف": cats[0], 
                 "الكمية": 1.0, 
                 "السعر الإفرادي": 0.0, 
                 "الطرف المستفيد": p_list[0],
-                "خصم من المخزون تلقائياً": False
+                "خصم من المخزون تلقائياً": True if stock_item_names else False
             }])
             
             edited_df = st.data_editor(
@@ -230,7 +230,7 @@ def render_add_invoice(current_user):
                 num_rows="dynamic", 
                 use_container_width=True,
                 column_config={
-                    "اسم البند": st.column_config.TextColumn("اسم البند / المادة", required=True),
+                    "اسم البند": st.column_config.TextColumn("اسم البند / المادة (يطابق المخزون إن كان مادة)", required=True),
                     "التصنيف": st.column_config.SelectboxColumn("التصنيف", options=cats, required=True),
                     "الكمية": st.column_config.NumberColumn("الكمية", min_value=0.01, default=1.0),
                     "السعر الإفرادي": st.column_config.NumberColumn("السعر الإفرادي", min_value=0.0, default=0.0),
@@ -254,14 +254,16 @@ def render_add_invoice(current_user):
                         first_party = valid_items.iloc[0]["الطرف المستفيد"]
                         primary_s_id = int(parties.loc[parties['name'] == first_party, 'id'].values[0])
 
+                        # بدء معاملة ذرية متكاملة (Transaction Block)
                         try:
-                            # بدء Atomic Transaction مع التحقق من رصيد المستودع
-                            with get_db_cursor(commit=True) as (cur, conn):
+                            with get_db_cursor(commit=True) as (cur, _):
+                                # 1. ترحيل الفاتورة الأساسية
                                 cur.execute("""
                                     INSERT INTO transactions (id, tx_date, tx_type, project_id, stakeholder_id, vault_id, amount, currency, exchange_rate, amount_usd, direction, payment_method, description)
                                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
                                 """, (str(inv_id_m), t_date_m, str(t_type_m), p_id, primary_s_id, v_id, total_computed, curr_m, rate_m, amt_u, dir_m, method_m, desc_m))
                                 
+                                # 2. التحقق من بنود المخزون وخصمها ذرياً
                                 for _, r in valid_items.iterrows():
                                     i_name = str(r["اسم البند"]).strip()
                                     i_qty = float(r["الكمية"])
@@ -271,39 +273,49 @@ def render_add_invoice(current_user):
                                     i_stk_id = int(parties.loc[parties['name'] == i_party, 'id'].values[0])
                                     affects_inv = bool(r.get("خصم من المخزون تلقائياً", False))
 
-                                    # إذا كان البند مادة مخزنية ومحدد للخصم
                                     if affects_inv:
-                                        # التحقق الذري وقفل السجل عبر FOR UPDATE
+                                        # حجز وقفل سجل المادة المخزنية لمنع الـ Race Conditions
                                         cur.execute("""
-                                            SELECT quantity_on_hand 
+                                            SELECT quantity_on_hand, avg_unit_cost 
                                             FROM inventory_stock 
                                             WHERE item_name = %s 
                                             FOR UPDATE;
                                         """, (i_name,))
-                                        stock_row = cur.fetchone()
+                                        stock_record = cur.fetchone()
 
-                                        if not stock_row:
-                                            raise ValueError(f"المادة '{i_name}' غير معرفة في جدول المخزون.")
-                                        current_qty = float(stock_row[0])
-                                        if current_qty < i_qty:
-                                            raise ValueError(f"رصيد المادة '{i_name}' غير كافٍ. المتاح: {current_qty}, المطلوب: {i_qty}")
+                                        if not stock_record:
+                                            raise ValueError(f"فشل الترحيل: المادة '{i_name}' غير مسجلة في المخزون العام.")
+                                        
+                                        available_qty = float(stock_record[0])
+                                        unit_cost_val = float(stock_record[1])
 
-                                        # خصم الكمية ذرياً
+                                        # فحص الرصيد الصارم قبل التحديث
+                                        if available_qty < i_qty:
+                                            raise ValueError(f"عجز مخزني في المادة '{i_name}'. الرصيد المتوفر: {available_qty}، الكمية المطلوبة: {i_qty}")
+
+                                        # خصم الكمية من المستودع
                                         cur.execute("""
                                             UPDATE inventory_stock 
                                             SET quantity_on_hand = quantity_on_hand - %s 
                                             WHERE item_name = %s;
                                         """, (i_qty, i_name))
 
+                                        # ترحيل إلى سجل الصرف المخزني للرقابة والتدقيق
+                                        cur.execute("""
+                                            INSERT INTO inventory_issues (transaction_id, item_name, project_id, quantity, unit_cost)
+                                            VALUES (%s, %s, %s, %s, %s);
+                                        """, (str(inv_id_m), i_name, p_id, i_qty, unit_cost_val))
+
+                                    # إدراج بند الفاتورة
                                     cur.execute("""
                                         INSERT INTO invoice_items (transaction_id, item_name, category, quantity, unit_price, total_price, stakeholder_id, currency, affects_inventory)
                                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);
                                     """, (str(inv_id_m), i_name, str(r["التصنيف"]), i_qty, i_price, i_tot, i_stk_id, curr_m, affects_inv))
 
-                            st.success(f"تم ترحيل الفاتورة {inv_id_m} وتحديث قيود المخزون بنجاح.")
+                            st.success(f"تم اعتماد الفاتورة {inv_id_m} وخصم المواد من المستودع بنجاح.")
                             st.rerun()
                         except Exception as e:
-                            st.error(f"فشل ترحيل الفاتورة: {e}")
+                            st.error(f"❌ تم التراجع عن العملية بالكامل (Rollback): {e}")
 
 def render_edit_transactions(current_user):
     if current_user['role'] in ["Admin", "Accountant"]:
@@ -312,26 +324,34 @@ def render_edit_transactions(current_user):
         if not all_tx.empty:
             sel_str = st.selectbox("اختر الفاتورة:", [f"{r['id']} | {r['tx_date']} | {r['amount']} {r['currency']} | {r['description']}" for _, r in all_tx.iterrows()])
             sel_id = sel_str.split(" | ")[0]
-            if st.button(f"🗑️ حذف الفاتورة {sel_id} نهائياً"):
-                with get_db_cursor(commit=True) as (cur, _):
-                    # إعادة رصيد المخزون في حال كان هناك بنود مخصومة
-                    cur.execute("""
-                        SELECT item_name, quantity 
-                        FROM invoice_items 
-                        WHERE transaction_id = %s AND affects_inventory = TRUE;
-                    """, (sel_id,))
-                    inv_items = cur.fetchall()
-                    for it_name, it_q in inv_items:
+            
+            if st.button(f"🗑️ حذف الفاتورة {sel_id} نهائياً وإرجاع المخزون"):
+                try:
+                    with get_db_cursor(commit=True) as (cur, _):
+                        # استرجاع الكميات المخصومة إلى المخزون أولاً
                         cur.execute("""
-                            UPDATE inventory_stock 
-                            SET quantity_on_hand = quantity_on_hand + %s 
-                            WHERE item_name = %s;
-                        """, (float(it_q), it_name))
+                            SELECT item_name, quantity 
+                            FROM inventory_issues 
+                            WHERE transaction_id = %s;
+                        """, (sel_id,))
+                        issued_records = cur.fetchall()
 
-                    cur.execute("DELETE FROM invoice_items WHERE transaction_id = %s;", (sel_id,))
-                    cur.execute("DELETE FROM transactions WHERE id = %s;", (sel_id,))
-                st.success(f"تم حذف الفاتورة {sel_id} واسترجاع أرصدة المواد ذات الصلة.")
-                st.rerun()
+                        for it_name, it_q in issued_records:
+                            cur.execute("""
+                                UPDATE inventory_stock 
+                                SET quantity_on_hand = quantity_on_hand + %s 
+                                WHERE item_name = %s;
+                            """, (float(it_q), it_name))
+
+                        # الحذف المتسلسل لسجلات الفاتورة وبنودها
+                        cur.execute("DELETE FROM inventory_issues WHERE transaction_id = %s;", (sel_id,))
+                        cur.execute("DELETE FROM invoice_items WHERE transaction_id = %s;", (sel_id,))
+                        cur.execute("DELETE FROM transactions WHERE id = %s;", (sel_id,))
+                    
+                    st.success(f"تم حذف الفاتورة {sel_id} واستعادة الكميات المخصومة إلى المستودع.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"فشل حذف الفاتورة: {e}")
 
 def render_investor_statements():
     st.subheader("📑 كشوفات حسابات المستثمرين والعملاء")
