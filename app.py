@@ -38,26 +38,39 @@ st.set_page_config(
 )
 
 # ----------------------------------------------------
-# 2. الهوية البصرية وأنماط RTL
+# 2. الهوية البصرية وضبط استقرار Glide Data Grid
 # ----------------------------------------------------
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
+    
     html, body, [class*="css"] { 
         font-family: 'Cairo', sans-serif !important; 
     }
-    .block-container, div, span, p, label, .stMarkdown, .stText, h1, h2, h3, h4 {
+    
+    /* ضبط اتجاه الواجهة العام RTL */
+    .block-container, p, label, .stMarkdown, .stText, h1, h2, h3, h4, h5, h6 {
         direction: rtl !important;
         text-align: right !important;
     }
-    [data-testid="stDataFrame"] div, [data-testid="stDataFrame"] span, [data-testid="stDataFrame"] td, [data-testid="stDataFrame"] th {
-        text-align: right !important;
-        direction: rtl !important;
+    
+    /* عزل محرك Glide Data Grid والكانفاس لمنع تشوه الأعمدة */
+    [data-testid="stDataFrame"], 
+    [data-testid="stDataEditor"],
+    [data-testid="stDataFrame"] *, 
+    [data-testid="stDataEditor"] * {
+        direction: ltr !important;
+        text-align: left !important;
     }
+
     #MainMenu, footer, header[data-testid="stHeader"] {
         visibility: hidden !important;
     }
-    .stApp { background-color: #F9F9F8 !important; }
+    
+    .stApp { 
+        background-color: #F9F9F8 !important; 
+    }
+    
     .metric-card { 
         background: #FFFFFF; 
         border-radius: 12px; 
@@ -69,9 +82,26 @@ st.markdown("""
         direction: rtl; 
         text-align: center !important; 
     }
-    .metric-title { color: #A29F98; font-size: 0.9rem; font-weight: 700; margin-bottom: 5px; text-align: center !important; }
-    .metric-value-usd { color: #0F4733; font-size: 1.8rem; font-weight: 900; text-align: center !important; }
-    .metric-value-gold { color: #BE9D5F; font-size: 1.8rem; font-weight: 900; text-align: center !important; }
+    .metric-title { 
+        color: #A29F98; 
+        font-size: 0.9rem; 
+        font-weight: 700; 
+        margin-bottom: 5px; 
+        text-align: center !important; 
+    }
+    .metric-value-usd { 
+        color: #0F4733; 
+        font-size: 1.8rem; 
+        font-weight: 900; 
+        text-align: center !important; 
+    }
+    .metric-value-gold { 
+        color: #BE9D5F; 
+        font-size: 1.8rem; 
+        font-weight: 900; 
+        text-align: center !important; 
+    }
+    
     input, textarea, select, div[data-baseweb="select"] > div { 
         background-color: #FFFFFF !important; 
         border: 1.5px solid #A29F98 !important; 
@@ -79,6 +109,7 @@ st.markdown("""
         direction: rtl !important; 
         text-align: right !important; 
     }
+    
     .stButton > button, .stDownloadButton > button { 
         background-color: #0F4733 !important; 
         color: #FFFFFF !important; 
@@ -234,7 +265,7 @@ with col_nav3:
 st.markdown("<hr style='border: 0.5px solid #BE9D5F; margin-top: 10px; margin-bottom: 20px;'>", unsafe_allow_html=True)
 
 # ----------------------------------------------------
-# 5. التوجيه التنفيذي للموديولات (Router Dispatch)
+# 5. التوجيه التنفيذي للموديولات
 # ----------------------------------------------------
 if menu == "📊 لوحة المؤشرات العامة والأرصدة":
     render_dashboard()
