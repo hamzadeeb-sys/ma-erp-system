@@ -72,7 +72,7 @@ st.markdown("""
         text-align: left !important;
     }
 
-    /* إخفاء عناصر المطور والفوتر حصراً دون المساس بالهيدر أو زر فتح الـ Sidebar */
+    /* إخفاء عناصر المطور والفوتر */
     #MainMenu, 
     footer, 
     .stAppDeployButton,
@@ -82,24 +82,40 @@ st.markdown("""
         visibility: hidden !important;
     }
 
-    /* جعل خلفية الهيدر شفافة لمنع الحجب البصري */
     header[data-testid="stHeader"] {
         background: transparent !important;
-        height: 2.5rem !important;
+        height: 1rem !important;
     }
 
-    /* إبراز وتنسيق زر فتح الشريط الجانبي عند انغلاقه */
+    /* تثبيت زر فتح الشريط الجانبي في منتصف الشاشة كـ Floating Handle */
     [data-testid="stSidebarCollapsedControl"] {
+        position: fixed !important;
+        top: 50% !important;
+        right: 0.75rem !important;
+        bottom: auto !important;
+        left: auto !important;
+        transform: translateY(-50%) !important;
         display: flex !important;
         visibility: visible !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 2.6rem !important;
+        height: 2.6rem !important;
         color: #0F4733 !important;
         background-color: #FFFFFF !important;
         border: 1.5px solid #0F4733 !important;
-        border-radius: 6px !important;
-        box-shadow: 0 2px 6px rgba(15, 71, 51, 0.15) !important;
-        top: 0.5rem !important;
-        right: 0.5rem !important;
+        border-radius: 8px !important;
+        box-shadow: 0 4px 14px rgba(15, 71, 51, 0.2) !important;
         z-index: 999999 !important;
+        cursor: pointer !important;
+        transition: all 0.2s ease-in-out !important;
+    }
+    
+    [data-testid="stSidebarCollapsedControl"]:hover {
+        background-color: #0F4733 !important;
+        color: #FFFFFF !important;
+        border-color: #BE9D5F !important;
+        box-shadow: 0 6px 18px rgba(15, 71, 51, 0.3) !important;
     }
     
     .stApp { 
@@ -297,7 +313,6 @@ else:
         "كشف حسابي ودوامي الذاتي"
     ]
 
-# الكتالوج الهرمي للوحدات
 MODULE_CATALOG = [
     {
         "category": "لوحة القيادة والمؤشرات",
@@ -348,7 +363,6 @@ MODULE_CATALOG = [
     },
 ]
 
-# تصفية الكتالوج وفق الصلاحيات الفعلية للمستخدم
 user_categories = []
 for cat in MODULE_CATALOG:
     valid_items = [it for it in cat["items"] if it["title"] in allowed_menus]
@@ -370,7 +384,6 @@ with st.sidebar:
         </div>
     """, unsafe_allow_html=True)
     
-    # بطاقة تعريف المستخدم
     st.markdown(f"""
         <div style="background: #F6F8FA; border: 1px solid #D0D7DE; border-radius: 6px; padding: 10px; margin-bottom: 16px;">
             <div style="font-size: 0.85rem; font-weight: 700; color: #1F2328;">{current_user['full_name']}</div>
@@ -378,7 +391,6 @@ with st.sidebar:
         </div>
     """, unsafe_allow_html=True)
 
-    # 1. تحديد القطاع الرئيسي
     st.caption("القطاع الرئيسي")
     cat_names = [f"{c['icon']} {c['category']}" for c in user_categories]
     selected_cat_str = st.radio("اختر القطاع:", cat_names, label_visibility="collapsed", key="nav_main_cat")
@@ -386,7 +398,6 @@ with st.sidebar:
 
     st.markdown("<hr style='border: 0.5px solid #E1E4E8; margin: 12px 0;'>", unsafe_allow_html=True)
 
-    # 2. تحديد الشاشة الفرعية ضمن القطاع المختار
     st.caption("الشاشات والعمليات المتاحة")
     item_labels = [f"{it['icon']} {it['title']}" for it in selected_cat["items"]]
     selected_item_str = st.radio("اختر الشاشة:", item_labels, label_visibility="collapsed", key=f"nav_sub_screen_{selected_cat['category']}")
