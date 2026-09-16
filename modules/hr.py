@@ -3,10 +3,15 @@ from datetime import datetime, time
 from core.db import run_query, get_db_cursor
 
 def render_attendance(current_user):
-    st.subheader("⏱️ متابعة حضور وساعات دوام الكوادر")
+    st.subheader(":material/schedule: متابعة حضور وساعات دوام الكوادر")
     emps_df = run_query("SELECT id, name FROM stakeholders WHERE role IN ('Employee', 'Partner') ORDER BY name;")
 
-    tab_att_log, tab_att_new, tab_att_rep = st.tabs(["📋 سجل الدوام", "➕ تسجيل حركة دوام", "📊 ملخص الساعات والغياب"])
+    tab_att_log, tab_att_new, tab_att_rep = st.tabs([
+        ":material/badge: سجل الدوام العام", 
+        ":material/add_circle: تسجيل قيد دوام", 
+        ":material/analytics: ملخص الساعات والغياب"
+    ])
+    
     with tab_att_log:
         df_att_log = run_query("""
             SELECT a.id AS "المعرف", s.name AS "الموظف", a.work_date AS "التاريخ", 
@@ -30,7 +35,7 @@ def render_attendance(current_user):
                     t_out = st.time_input("الانصراف", time(17, 0))
                     att_notes = st.text_input("ملاحظات")
 
-                if st.form_submit_button("💾 تثبيت قيد الدوام"):
+                if st.form_submit_button("تثبيت قيد الدوام", icon=":material/save:"):
                     emp_id_val = int(emps_df.loc[emps_df['name'] == sel_emp_att, 'id'].values[0])
                     dur = 8.0 if att_status in ["حاضر", "متأخر"] else 0.0
                     with get_db_cursor(commit=True) as (cur, _):
@@ -40,7 +45,7 @@ def render_attendance(current_user):
                             ON CONFLICT (employee_id, work_date) 
                             DO UPDATE SET time_in = EXCLUDED.time_in, time_out = EXCLUDED.time_out, total_hours = EXCLUDED.total_hours, status = EXCLUDED.status, notes = EXCLUDED.notes;
                         """, (emp_id_val, att_date, t_in if dur > 0 else None, t_out if dur > 0 else None, dur, att_status, att_notes))
-                    st.success("تم تسجيل الدوام بنجاح.")
+                    st.success("تم تثبيت حركة الدوام بنجاح.")
                     st.rerun()
 
     with tab_att_rep:
@@ -57,12 +62,12 @@ def render_attendance(current_user):
         st.dataframe(df_att_rep.fillna("-"), use_container_width=True, hide_index=True)
 
 def render_payroll(current_user):
-    st.subheader("💳 احتساب مسيرات الرواتب وصرف المستحقات")
+    st.subheader(":material/payments: احتساب مسيرات الرواتب وصرف المستحقات")
     emps_sal = run_query("SELECT id, name, salary_amount, salary_currency, salary_type FROM stakeholders WHERE role IN ('Employee', 'Partner') AND salary_amount > 0;")
     if not emps_sal.empty:
         c1, c2 = st.columns(2)
-        with c1: sel_emp = st.selectbox("الموظف", emps_sal['name'].tolist())
-        with c2: p_month = st.text_input("الشهر (YYYY-MM)", value=datetime.now().strftime("%Y-%m"))
+        with c1: sel_emp = st.selectbox("الموظف المستهدف", emps_sal['name'].tolist())
+        with c2: p_month = st.text_input("شهر المسير (YYYY-MM)", value=datetime.now().strftime("%Y-%m"))
 
         emp_row = emps_sal[emps_sal['name'] == sel_emp].iloc[0]
         emp_id = int(emp_row['id'])
@@ -88,14 +93,14 @@ def render_payroll(current_user):
         net_s = base_s + ot_val - total_ded
 
         col1, col2, col3, col4, col5 = st.columns(5)
-        with col1: st.metric("الأساسي", f"{base_s:,.2f} {curr_db}")
-        with col2: st.metric("الإضافي", f"+{ot_val:,.2f}")
+        with col1: st.metric("الراتب الأساسي", f"{base_s:,.2f} {curr_db}")
+        with col2: st.metric("الإضافي المحتسب", f"+{ot_val:,.2f}")
         with col3: st.metric("خصم الغياب", f"-{ded_abs:,.2f}")
-        with col4: st.metric("السلف السابقة", f"-{adv_taken:,.2f}")
-        with col5: st.metric("صافي المستحق", f"{net_s:,.2f} {curr_db}")
+        with col4: st.metric("السلف المقتطعة", f"-{adv_taken:,.2f}")
+        with col5: st.metric("صافي المستحق للصرف", f"{net_s:,.2f} {curr_db}")
 
         if current_user['role'] in ["Admin", "Accountant"]:
-            if st.button("🚀 اعتماد وصرف مسير الراتب"):
+            if st.button("اعتماد وصرف المسير المالي", icon=":material/check_circle:"):
                 sal_id = f"SAL-{p_month}-{emp_id}"
                 v_id = 1 if curr_db == 'USD' else 2
                 with get_db_cursor(commit=True) as (cur, _):
@@ -107,14 +112,14 @@ def render_payroll(current_user):
                     if net_s > 0:
                         cur.execute("INSERT INTO transactions (id, tx_date, tx_type, project_id, stakeholder_id, vault_id, amount, currency, exchange_rate, amount_usd, direction, payment_method, description) VALUES (%s, CURRENT_DATE, 'راتب او سلفة', 2, %s, %s, %s, %s, %s, %s, 'OUT', 'كاش', %s);", (sal_id, emp_id, v_id, net_s, curr_db, s_rate if curr_db == 'SYP' else 1.0, amt_u, f"صرف صافي راتب شهر {p_month}"))
                     cur.execute("INSERT INTO payroll_records (employee_id, payroll_month, base_salary, overtime_hours, overtime_amount, absence_days, deductions, net_salary, currency, payment_status, transaction_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'معتمد', %s);", (emp_id, p_month, base_s, ot_h, ot_val, abs_d, total_ded, net_s, curr_db, sal_id))
-                st.success("تم صرف المسير وترحيل القيد المحاسبي.")
+                st.success("تم صرف المسير وترحيل السند المحاسبي.")
                 st.rerun()
 
 def render_employee_portal(current_user):
-    st.subheader(f"👤 السجل المالي والدوام الذاتي: {current_user['full_name']}")
+    st.subheader(f":material/account_circle: السجل المالي والدوام الذاتي: {current_user['full_name']}")
     emp_s_id = current_user.get("stakeholder_id")
     if not emp_s_id:
-        st.warning("⚠️ هذا الحساب غير مربوط بملف موظف. يرجى مراجعة مسؤول النظام.")
+        st.warning("هذا الحساب غير مربوط بملف موظف. يرجى مراجعة إدارة النظام.")
     else:
         with get_db_cursor() as (cur, _):
             cur.execute("SELECT name, salary_amount, salary_currency FROM stakeholders WHERE id = %s;", (emp_s_id,))
@@ -128,10 +133,10 @@ def render_employee_portal(current_user):
 
         c1, c2 = st.columns(2)
         with c1: st.metric("الراتب الأساسي المسجل", f"{base_sal:,.2f} {curr_sal}")
-        with c2: st.metric("إجمالي الدفعات المستلمة", f"{tot_received:,.2f} {curr_sal}")
+        with c2: st.metric("إجمالي الدفعات المقبوضة", f"{tot_received:,.2f} {curr_sal}")
 
         st.markdown("---")
-        tab1, tab2 = st.tabs(["📜 السندات المستلمة", "⏱️ سجل الحضور اليومي"])
+        tab1, tab2 = st.tabs([":material/receipt_long: السندات المقبوضة", ":material/schedule: سجل الحضور والدوام"])
         with tab1:
             st.dataframe(run_query("""
                 SELECT id AS "رقم السند", tx_date AS "التاريخ", tx_type AS "نوع الحركة", 
