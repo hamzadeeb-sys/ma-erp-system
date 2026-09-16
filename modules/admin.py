@@ -19,39 +19,44 @@ def render_admin():
 
         st.markdown("---")
         all_u = run_query("SELECT id, username FROM app_users;")
-        sel_u_edit = st.selectbox("اختر الحساب لتعديل كلمة المرور:", all_u['username'].tolist())
-        new_pass = st.text_input("كلمة المرور الجديدة", type="password")
-        if st.button("تحديث كلمة المرور وتشفيرها", icon=":material/lock_reset:"):
-            if new_pass.strip():
-                hashed = hash_password(new_pass.strip())
-                with get_db_cursor(commit=True) as (cur, _):
-                    cur.execute("UPDATE app_users SET password = %s WHERE username = %s;", (hashed, sel_u_edit))
-                st.success(f"تم تحديث وتشفير كلمة المرور للحساب {sel_u_edit}.")
+        sel_u_edit = st.selectbox("اختر الحساب لتعديل كلمة المرور:", all_u['username'].tolist(), index=None, placeholder="اختر الحساب...")
+        if sel_u_edit:
+            new_pass = st.text_input("كلمة المرور الجديدة", type="password", placeholder="أدخل كلمة المرور الجديدة...")
+            if st.button("تحديث كلمة المرور وتشفيرها", icon=":material/lock_reset:"):
+                if new_pass.strip():
+                    hashed = hash_password(new_pass.strip())
+                    with get_db_cursor(commit=True) as (cur, _):
+                        cur.execute("UPDATE app_users SET password = %s WHERE username = %s;", (hashed, sel_u_edit))
+                    st.success(f"تم تحديث وتشفير كلمة المرور للحساب {sel_u_edit}.")
 
     with tab_projs:
         col_p1, col_p2 = st.columns(2)
         with col_p1:
             st.markdown("#### إضافة مشروع جديد")
             with st.form("new_proj_form", clear_on_submit=True):
-                pn = st.text_input("اسم المشروع")
+                pn = st.text_input("اسم المشروع", placeholder="أدخل الاسم الرسمي للمشروع...")
                 pt_map = {"إكساء وتشطيب": "Finishing", "تطوير عقاري": "Development", "داخلي": "Internal"}
-                pt = st.selectbox("النوع", list(pt_map.keys()))
-                pf = st.number_input("أتعاب الإدارة %", min_value=0.0, value=15.0)
+                pt = st.selectbox("النوع", list(pt_map.keys()), index=None, placeholder="حدد تصنيف المشروع...")
+                pf = st.number_input("أتعاب الإدارة %", min_value=0.0, max_value=100.0, value=None, placeholder="0.00", step=1.0)
                 if st.form_submit_button("حفظ وتفعيل المشروع", icon=":material/add_business:"):
-                    if pn.strip():
+                    if not pn or not pt or pf is None:
+                        st.error("يرجى إدخال اسم المشروع، نوعه، ونسبة أتعاب الإدارة.")
+                    else:
                         with get_db_cursor(commit=True) as (cur, _):
-                            cur.execute("INSERT INTO projects (name, project_type, management_fee_rate, status) VALUES (%s, %s, %s, 'Active') ON CONFLICT (name) DO NOTHING;", (pn.strip(), pt_map[pt], pf / 100.0))
+                            cur.execute("INSERT INTO projects (name, project_type, management_fee_rate, status) VALUES (%s, %s, %s, 'Active') ON CONFLICT (name) DO NOTHING;", (pn.strip(), pt_map[pt], float(pf) / 100.0))
                         st.success("تم إنشاء المشروع بنجاح.")
                         st.rerun()
 
         with col_p2:
             st.markdown("#### تسجيل مستثمر جديد")
             with st.form("new_inv_form", clear_on_submit=True):
-                inv_name = st.text_input("اسم المستثمر")
-                inv_phone = st.text_input("رقم الهاتف")
+                inv_name = st.text_input("اسم المستثمر", placeholder="الاسم الكامل للمستثمر...")
+                inv_phone = st.text_input("رقم الهاتف", placeholder="رقم الهاتف...")
                 if st.form_submit_button("تسجيل المستثمر", icon=":material/person_add:"):
-                    if inv_name.strip():
+                    if not inv_name.strip():
+                        st.error("يرجى إدخال اسم المستثمر.")
+                    else:
                         with get_db_cursor(commit=True) as (cur, _):
-                            cur.execute("INSERT INTO stakeholders (name, role, phone, status) VALUES (%s, 'Investor', %s, 'نشط') ON CONFLICT (name) DO NOTHING;", (inv_name.strip(), inv_phone.strip()))
+                            cur.execute("INSERT INTO stakeholders (name, role, phone, status) VALUES (%s, 'Investor', %s, 'نشط') ON CONFLICT (name) DO NOTHING;", (inv_name.strip(), inv_phone.strip() if inv_phone else ""))
                         st.success("تم تسجيل المستثمر بنجاح.")
                         st.rerun()
