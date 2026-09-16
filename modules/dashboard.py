@@ -3,7 +3,7 @@ import pandas as pd
 from core.db import run_query
 
 def render_dashboard():
-    st.subheader("💵 السيولة النقدية وأرصدة صناديق الشركة العامة")
+    st.subheader(":material/account_balance_wallet: السيولة النقدية وأرصدة الصناديق")
     df_vaults = run_query("""
         SELECT v.name AS vault_name, v.currency,
                COALESCE(SUM(CASE WHEN t.direction = 'IN' THEN t.amount ELSE -t.amount END), 0) AS current_balance
@@ -14,21 +14,21 @@ def render_dashboard():
     """)
     col1, col2 = st.columns(2)
     with col1:
-        usd_bal = df_vaults.loc[df_vaults['currency'] == 'USD', 'current_balance'].values[0] if not df_vaults.empty else 0
+        usd_bal = df_vaults.loc[df_vaults['currency'] == 'USD', 'current_balance'].values[0] if not df_vaults.empty and 'USD' in df_vaults['currency'].values else 0
         st.markdown(f'<div class="metric-card"><div class="metric-title">رصيد الصندوق الرئيسي (USD)</div><div class="metric-value-usd">{usd_bal:,.2f} $</div></div>', unsafe_allow_html=True)
     with col2:
-        syp_bal = df_vaults.loc[df_vaults['currency'] == 'SYP', 'current_balance'].values[0] if not df_vaults.empty else 0
-        st.markdown(f'<div class="metric-card"><div class="metric-title">رصيد الصندوق الرئيسي (SYP)</div><div class="metric-value-gold">{syp_bal:,.0f} ل.س</div></div>', unsafe_allow_html=True)
+        syp_bal = df_vaults.loc[df_vaults['currency'] == 'SYP', 'current_balance'].values[0] if not df_vaults.empty and 'SYP' in df_vaults['currency'].values else 0
+        st.markdown(f'<div class="metric-card" style="border-top-color: #BE9D5F;"><div class="metric-title">رصيد الصندوق الرئيسي (SYP)</div><div class="metric-value-gold">{syp_bal:,.0f} ل.س</div></div>', unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("🏗️ أداء المشاريع النشطة والتشغيلية")
+    st.subheader(":material/domain: أداء المشاريع التشغيلية والتنفيذية")
     df_proj_summary = run_query("""
         SELECT p.name AS "المشروع",
                CASE WHEN p.project_type = 'Finishing' THEN 'إكساء وتشطيب'
                     WHEN p.project_type = 'Development' THEN 'تطوير عقاري'
                     WHEN p.project_type = 'Internal' THEN 'داخلي ومخزون'
                     ELSE COALESCE(p.project_type, 'عام') END AS "نوع المشروع",
-               CASE WHEN p.status = 'Active' THEN 'نشط 🟢' ELSE 'مكتمل 🏁' END AS "الحالة",
+               CASE WHEN p.status = 'Active' THEN 'نشط' ELSE 'مكتمل' END AS "الحالة",
                COUNT(t.id) AS "عدد العمليات",
                COALESCE(SUM(CASE WHEN t.direction = 'OUT' THEN t.amount_usd ELSE 0 END), 0) AS "إجمالي المصاريف ($)",
                COALESCE(SUM(CASE WHEN t.direction = 'IN' THEN t.amount_usd ELSE 0 END), 0) AS "إجمالي المقبوضات ($)"
