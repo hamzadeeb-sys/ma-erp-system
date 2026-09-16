@@ -39,7 +39,7 @@ st.set_page_config(
 )
 
 # ----------------------------------------------------
-# 2. الهوية البصرية وضبط استقرار الحاويات
+# 2. الهوية البصرية وشبكة الـ Responsive Fluid Grid
 # ----------------------------------------------------
 st.markdown("""
     <style>
@@ -89,19 +89,37 @@ st.markdown("""
         background-color: #F9F9F8 !important; 
     }
 
-    /* تنسيق الحاويات المؤطرة لتطابق النمط المؤسسي النظيف */
-    [data-testid="stVerticalBlockBorderWrapper"] {
+    /* تحويل صف البطاقات إلى Responsive Flex Grid ديناميكي حر */
+    div[data-testid="stHorizontalBlock"]:has(.portal-card-anchor) {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: 16px !important;
+        width: 100% !important;
+        align-items: stretch !important;
+    }
+
+    div[data-testid="stHorizontalBlock"]:has(.portal-card-anchor) > div[data-testid="column"] {
+        flex: 1 1 280px !important;
+        min-width: 270px !important;
+        max-width: 100% !important;
+        width: auto !important;
+    }
+
+    /* توحيد ارتفاع وتنسيق بطاقات القطاعات */
+    div[data-testid="stHorizontalBlock"]:has(.portal-card-anchor) [data-testid="stVerticalBlockBorderWrapper"] {
         background-color: #FFFFFF !important;
         border: 1px solid #D0D7DE !important;
         border-top: 4px solid #0F4733 !important;
         border-radius: 8px !important;
         box-shadow: 0 1px 3px rgba(31, 35, 40, 0.05) !important;
-        padding: 14px !important;
-        margin-bottom: 12px !important;
+        padding: 16px !important;
         height: 100% !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: space-between !important;
     }
 
-    /* بطاقات المؤشرات */
+    /* بطاقات المؤشرات الرقمية */
     .metric-card { 
         background: #FFFFFF; 
         border-radius: 6px; 
@@ -282,7 +300,6 @@ else:
         "كشف حسابي ودوامي الذاتي"
     ]
 
-# هيكلة القطاعات مع التوصيف لملء الحاويات وظيفياً
 MODULE_CATALOG = [
     {
         "category": "لوحة القيادة والمؤشرات",
@@ -338,7 +355,7 @@ MODULE_CATALOG = [
     },
 ]
 
-# تصفية القطاعات وفق الصلاحيات
+# تصفية القطاعات وفق الصلاحيات الفعلية
 user_categories = []
 for cat in MODULE_CATALOG:
     valid_items = [it for it in cat["items"] if it["title"] in allowed_menus]
@@ -409,49 +426,27 @@ with col_b3:
 st.markdown("<hr style='border: 0.5px solid #D0D7DE; margin-top: 10px; margin-bottom: 20px;'>", unsafe_allow_html=True)
 
 # ----------------------------------------------------
-# 6. شاشة البوابة المركزية بهندسة متوازنة (2 + 3 Grid)
+# 6. شاشة البوابة المركزية الديناميكية بالكامل (Fluid Auto-Fit Grid)
 # ----------------------------------------------------
-def render_category_card(cat):
-    with st.container(border=True):
-        st.markdown(f"#### {cat['icon']} {cat['category']}")
-        st.caption(cat["desc"])
-        st.markdown("<hr style='margin: 8px 0; border: 0.5px solid #E1E4E8;'>", unsafe_allow_html=True)
-        for it in cat["items"]:
-            if st.button(it["title"], icon=it["icon"], use_container_width=True, key=f"portal_btn_{it['title']}"):
-                st.session_state.current_page = it["title"]
-                st.rerun()
-
 if st.session_state.current_page == "HOME":
     st.markdown("### :material/grid_view: بوابة العمليات والقطاعات التنفيذية")
     st.caption("حدد القطاع أو الشاشة المطلوبة للبدء المباشر:")
 
-    # إذا كانت القطاعات مكتملة (5 قطاعات): تطبيق المعمارية المتوازنة (2 في الأعلى + 3 في الأسفل)
-    if len(user_categories) == 5:
-        # الصف الأول: القطاعات الاستراتيجية (نصفين متطابقين 50% / 50%)
-        row1_c1, row1_c2 = st.columns(2)
-        with row1_c1:
-            render_category_card(user_categories[0])
-        with row1_c2:
-            render_category_card(user_categories[1])
+    # توليد صف أعمدة ديناميكي يتحول بـ CSS إلى Flex-wrap حر
+    grid_cols = st.columns(len(user_categories))
 
-        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
-
-        # الصف الثاني: القطاعات التشغيلية (3 أثلاث متطابقة 33% / 33% / 33%)
-        row2_c1, row2_c2, row2_c3 = st.columns(3)
-        with row2_c1:
-            render_category_card(user_categories[2])
-        with row2_c2:
-            render_category_card(user_categories[3])
-        with row2_c3:
-            render_category_card(user_categories[4])
-
-    else:
-        # شبكة متجاوبة ديناميكية لأصحاب الصلاحيات المحدودة (مستخدمين عاديين / سكرتاريا)
-        cols_count = min(len(user_categories), 3)
-        dyn_cols = st.columns(cols_count)
-        for idx, cat in enumerate(user_categories):
-            with dyn_cols[idx % cols_count]:
-                render_category_card(cat)
+    for idx, cat in enumerate(user_categories):
+        with grid_cols[idx]:
+            # Anchor tag لاستهداف حاوية Flexbox برمجياً
+            st.markdown('<div class="portal-card-anchor" style="display:none;"></div>', unsafe_allow_html=True)
+            with st.container(border=True):
+                st.markdown(f"#### {cat['icon']} {cat['category']}")
+                st.caption(cat["desc"])
+                st.markdown("<hr style='margin: 8px 0; border: 0.5px solid #E1E4E8;'>", unsafe_allow_html=True)
+                for it in cat["items"]:
+                    if st.button(it["title"], icon=it["icon"], use_container_width=True, key=f"portal_btn_{it['title']}"):
+                        st.session_state.current_page = it["title"]
+                        st.rerun()
 
 # ----------------------------------------------------
 # 7. توجيه الشاشات التابعة
