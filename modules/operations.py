@@ -1,16 +1,25 @@
 import streamlit as st
 from datetime import datetime
 from core.db import run_query, get_db_cursor
+from core.utils import to_excel_download_link
 
 def render_inventory(current_user):
-    st.subheader("📦 مستودع ومخزون مواد المشاريع")
-    tab_st, tab_iss = st.tabs(["🧱 جرد المواد", "📤 صرف مادة إلى مشروع"])
+    st.subheader(":material/inventory_2: إدارة المخزون ومستودع المواد")
+    tab_st, tab_iss, tab_log = st.tabs([
+        ":material/warehouse: جرد المواد", 
+        ":material/outbox: صرف مادة لمشروع", 
+        ":material/history: سجل حركات الصرف"
+    ])
+    
     with tab_st:
-        st.dataframe(run_query("""
+        df_stock = run_query("""
             SELECT item_name AS "المادة / الصنف", category AS "التصنيف", 
                    quantity_on_hand AS "الرصيد المتوفر", avg_unit_cost AS "التكلفة الإفرادية", currency AS "العملة"
-            FROM inventory_stock ORDER BY quantity_on_hand DESC;
-        """).fillna("-"), use_container_width=True, hide_index=True)
+            FROM inventory_stock 
+            ORDER BY quantity_on_hand DESC;
+        """)
+        st.dataframe(df_stock.fillna("-"), use_container_width=True, hide_index=True)
+        st.download_button("تصدير الجرد (Excel)", data=to_excel_download_link(df_stock, "Inventory_Stock.xlsx"), file_name="Inventory_Stock.xlsx", icon=":material/table_view:")
 
     with tab_iss:
         if current_user['role'] in ["Admin", "Accountant"]:
@@ -18,22 +27,58 @@ def render_inventory(current_user):
             df_p = run_query("SELECT id, name FROM projects WHERE status = 'Active' AND project_type NOT IN ('Internal', 'Factory');")
             if not df_mats.empty and not df_p.empty:
                 with st.form("iss_mat_form"):
-                    sel_mat = st.selectbox("المادة", df_mats['item_name'].tolist())
+                    sel_mat = st.selectbox("المادة المطلوبة", df_mats['item_name'].tolist())
                     mat_inf = df_mats[df_mats['item_name'] == sel_mat].iloc[0]
                     sel_p = st.selectbox("المشروع المستلم", df_p['name'].tolist())
-                    iss_q = st.number_input("الكمية", min_value=0.01, max_value=float(mat_inf['quantity_on_hand']), value=1.0)
-                    if st.form_submit_button("🚀 اعتماد الصرف المخزني"):
+                    iss_q = st.number_input("الكمية المراد صرفها", min_value=0.01, max_value=float(mat_inf['quantity_on_hand']), value=1.0)
+                    
+                    if st.form_submit_button("اعتماد الصرف وتحديث المستودع", icon=":material/send:"):
                         p_id = int(df_p.loc[df_p['name'] == sel_p, 'id'].values[0])
                         tot = iss_q * float(mat_inf['avg_unit_cost'])
-                        with get_db_cursor(commit=True) as (cur, _):
-                            cur.execute("UPDATE inventory_stock SET quantity_on_hand = quantity_on_hand - %s WHERE item_name = %s;", (iss_q, sel_mat))
-                            cur.execute("INSERT INTO transactions (id, tx_date, tx_type, project_id, stakeholder_id, vault_id, amount, currency, exchange_rate, amount_usd, direction, payment_method, description) VALUES (%s, CURRENT_DATE, 'صرف مواد من المخزون', %s, 1, 1, %s, %s, 1.0, %s, 'OUT', 'صرف مخزني', %s);", (f"MAT-{int(datetime.now().timestamp())}", p_id, tot, mat_inf['currency'], tot, f"صرف {iss_q} من {sel_mat}"))
-                        st.success("تم صرف المادة وتحديث رصيد المستودع.")
-                        st.rerun()
+                        ts_id = f"MAT-{int(datetime.now().timestamp())}"
+                        
+                        try:
+                            with get_db_cursor(commit=True) as (cur, _):
+                                cur.execute("SELECT quantity_on_hand FROM inventory_stock WHERE item_name = %s FOR UPDATE;", (sel_mat,))
+                                cur_q = float(cur.fetchone()[0])
+                                if cur_q < iss_q:
+                                    raise ValueError(f"عجز مخزني! المتاح: {cur_q}")
+
+                                cur.execute("UPDATE inventory_stock SET quantity_on_hand = quantity_on_hand - %s WHERE item_name = %s;", (iss_q, sel_mat))
+                                
+                                cur.execute("""
+                                    INSERT INTO transactions (id, tx_date, tx_type, project_id, stakeholder_id, vault_id, amount, currency, exchange_rate, amount_usd, direction, payment_method, description) 
+                                    VALUES (%s, CURRENT_DATE, 'صرف مواد من المخزون', %s, 1, 1, %s, %s, 1.0, %s, 'OUT', 'صرف مخزني', %s);
+                                """, (ts_id, p_id, tot, mat_inf['currency'], tot, f"صرف يدوي لـ {iss_q} من {sel_mat}"))
+
+                                cur.execute("""
+                                    INSERT INTO inventory_issues (transaction_id, item_name, project_id, quantity, unit_cost)
+                                    VALUES (%s, %s, %s, %s, %s);
+                                """, (ts_id, sel_mat, p_id, iss_q, float(mat_inf['avg_unit_cost'])))
+                                
+                            st.success("تم صرف المادة وتحديث رصيد المستودع.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"فشلت العملية: {e}")
+
+    with tab_log:
+        df_issues = run_query("""
+            SELECT i.id AS "رقم القيد", i.issued_at AS "تاريخ الصرف", i.transaction_id AS "رقم الفاتورة / الحركة",
+                   p.name AS "المشروع المستلم", i.item_name AS "اسم المادة", i.quantity AS "الكمية المصروفة",
+                   i.unit_cost AS "تكلفة الوحدة", ROUND(i.quantity * i.unit_cost, 2) AS "إجمالي التكلفة"
+            FROM inventory_issues i
+            LEFT JOIN projects p ON i.project_id = p.id
+            ORDER BY i.issued_at DESC, i.id DESC;
+        """)
+        st.dataframe(df_issues.fillna("-"), use_container_width=True, hide_index=True)
 
 def render_stakeholders(current_user):
-    st.subheader("👥 دليل الشركاء والموظفين والجهات الخارجية")
-    tab_list, tab_stk_ledger, tab_add_ext = st.tabs(["📋 القائمة وتعديل البيانات", "🔍 كشف الحركات التفصيلي", "➕ تسجيل جهة جديدة"])
+    st.subheader(":material/group: دليل الشركاء والموظفين والجهات الخارجية")
+    tab_list, tab_stk_ledger, tab_add_ext = st.tabs([
+        ":material/list: دليل الأطراف", 
+        ":material/manage_search: كشف الحركات المباشرة", 
+        ":material/person_add: تسجيل جهة جديدة"
+    ])
 
     with tab_list:
         st.dataframe(run_query("""
@@ -45,7 +90,7 @@ def render_stakeholders(current_user):
         st.markdown("---")
         all_stk = run_query("SELECT id, name FROM stakeholders ORDER BY name;")
         if not all_stk.empty:
-            chosen_stk_name = st.selectbox("اختر الطرف للتعديل:", [""] + all_stk['name'].tolist())
+            chosen_stk_name = st.selectbox("اختر الطرف لتعديل البيانات:", [""] + all_stk['name'].tolist())
             if chosen_stk_name:
                 with get_db_cursor() as (cur, _):
                     cur.execute("SELECT id, name, role, salary_amount, salary_currency, salary_type, phone, notes FROM stakeholders WHERE name = %s;", (chosen_stk_name,))
@@ -63,7 +108,7 @@ def render_stakeholders(current_user):
                     ed_phone = st.text_input("الهاتف", value=stk_rec[6] or "")
                     ed_notes = st.text_area("ملاحظات", value=stk_rec[7] or "")
 
-                    if st.form_submit_button("💾 حفظ التعديلات"):
+                    if st.form_submit_button("حفظ تعديلات الطرف", icon=":material/save:"):
                         with get_db_cursor(commit=True) as (cur, _):
                             cur.execute("UPDATE stakeholders SET name = %s, role = %s, salary_amount = %s, salary_currency = %s, phone = %s, notes = %s WHERE id = %s;", (ed_name.strip(), roles_map[ed_role], ed_sal, ed_curr, ed_phone.strip(), ed_notes.strip(), stk_rec[0]))
                         st.success("تم تحديث البيانات.")
@@ -72,7 +117,7 @@ def render_stakeholders(current_user):
     with tab_stk_ledger:
         all_stks_v = run_query("SELECT id, name FROM stakeholders ORDER BY name;")
         if not all_stks_v.empty:
-            sel_ledger = st.selectbox("اختر الطرف لعرض كشفه:", all_stks_v['name'].tolist())
+            sel_ledger = st.selectbox("اختر الطرف لعرض كشفه المباشر:", all_stks_v['name'].tolist())
             t_id = int(all_stks_v.loc[all_stks_v['name'] == sel_ledger, 'id'].values[0])
             st.dataframe(run_query("""
                 SELECT t.id AS "رقم الفاتورة", t.tx_date AS "التاريخ", t.tx_type AS "نوع الحركة", 
@@ -87,7 +132,7 @@ def render_stakeholders(current_user):
                 p_cat = st.selectbox("التصنيف", ["مورد مواد", "معمل تصنيع", "شحن ونقل", "استشارات", "أخرى"])
                 p_phone = st.text_input("رقم الهاتف")
                 p_notes = st.text_area("ملاحظات")
-                if st.form_submit_button("🚀 تسجيل الجهة"):
+                if st.form_submit_button("تسجيل الجهة", icon=":material/person_add:"):
                     if p_name.strip():
                         with get_db_cursor(commit=True) as (cur, _):
                             cur.execute("INSERT INTO stakeholders (name, role, phone, notes) VALUES (%s, 'General', %s, %s) ON CONFLICT (name) DO NOTHING;", (p_name.strip(), p_phone.strip(), f"[{p_cat}] {p_notes.strip()}"))
@@ -95,8 +140,8 @@ def render_stakeholders(current_user):
                         st.rerun()
 
 def render_appointments(current_user):
-    st.subheader("📅 سجل المواعيد وزيارات المكتب")
-    tab_v_list, tab_v_new = st.tabs(["📋 جدول الزيارات", "➕ تسجيل زيارة / موعد"])
+    st.subheader(":material/calendar_today: سجل المواعيد وزيارات المكتب")
+    tab_v_list, tab_v_new = st.tabs([":material/table_view: جدول المواعيد", ":material/edit_calendar: تسجيل موعد جديد"])
 
     with tab_v_list:
         cv1, cv2 = st.columns(2)
@@ -130,7 +175,7 @@ def render_appointments(current_user):
                     v_status = st.selectbox("الحالة", ["قيد الانتظار", "جارية", "مكتملة", "ملغية"])
                 v_notes = st.text_area("ملاحظات إضافية")
 
-                if st.form_submit_button("💾 حفظ الموعد"):
+                if st.form_submit_button("تثبيت وحفظ الموعد", icon=":material/event_available:"):
                     if v_name.strip():
                         with get_db_cursor(commit=True) as (cur, _):
                             cur.execute("INSERT INTO office_appointments (visitor_name, visitor_phone, visit_type, visit_date, visit_time, host_person, purpose, status, notes, recorded_by) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);", (v_name.strip(), v_phone.strip(), v_type, v_date, v_time, v_host, v_purpose.strip(), v_status, v_notes.strip(), current_user['full_name']))
