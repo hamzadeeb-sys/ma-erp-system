@@ -72,8 +72,34 @@ st.markdown("""
         text-align: left !important;
     }
 
-    #MainMenu, footer, header[data-testid="stHeader"] {
+    /* إخفاء عناصر المطور والفوتر حصراً دون المساس بالهيدر أو زر فتح الـ Sidebar */
+    #MainMenu, 
+    footer, 
+    .stAppDeployButton,
+    [data-testid="stToolbar"],
+    div[data-testid="stDecoration"] {
+        display: none !important;
         visibility: hidden !important;
+    }
+
+    /* جعل خلفية الهيدر شفافة لمنع الحجب البصري */
+    header[data-testid="stHeader"] {
+        background: transparent !important;
+        height: 2.5rem !important;
+    }
+
+    /* إبراز وتنسيق زر فتح الشريط الجانبي عند انغلاقه */
+    [data-testid="stSidebarCollapsedControl"] {
+        display: flex !important;
+        visibility: visible !important;
+        color: #0F4733 !important;
+        background-color: #FFFFFF !important;
+        border: 1.5px solid #0F4733 !important;
+        border-radius: 6px !important;
+        box-shadow: 0 2px 6px rgba(15, 71, 51, 0.15) !important;
+        top: 0.5rem !important;
+        right: 0.5rem !important;
+        z-index: 999999 !important;
     }
     
     .stApp { 
@@ -84,7 +110,7 @@ st.markdown("""
     section[data-testid="stSidebar"] {
         background-color: #FFFFFF !important;
         border-left: 1px solid #D0D7DE !important;
-        padding-top: 1.5rem !important;
+        padding-top: 1rem !important;
         direction: rtl !important;
     }
     section[data-testid="stSidebar"] * {
@@ -355,7 +381,7 @@ with st.sidebar:
     # 1. تحديد القطاع الرئيسي
     st.caption("القطاع الرئيسي")
     cat_names = [f"{c['icon']} {c['category']}" for c in user_categories]
-    selected_cat_str = st.radio("اختر القطاع:", cat_names, label_visibility="collapsed")
+    selected_cat_str = st.radio("اختر القطاع:", cat_names, label_visibility="collapsed", key="nav_main_cat")
     selected_cat = next(c for c in user_categories if f"{c['icon']} {c['category']}" == selected_cat_str)
 
     st.markdown("<hr style='border: 0.5px solid #E1E4E8; margin: 12px 0;'>", unsafe_allow_html=True)
@@ -363,7 +389,7 @@ with st.sidebar:
     # 2. تحديد الشاشة الفرعية ضمن القطاع المختار
     st.caption("الشاشات والعمليات المتاحة")
     item_labels = [f"{it['icon']} {it['title']}" for it in selected_cat["items"]]
-    selected_item_str = st.radio("اختر الشاشة:", item_labels, label_visibility="collapsed")
+    selected_item_str = st.radio("اختر الشاشة:", item_labels, label_visibility="collapsed", key=f"nav_sub_screen_{selected_cat['category']}")
     selected_screen_title = next(it["title"] for it in selected_cat["items"] if f"{it['icon']} {it['title']}" == selected_item_str)
 
     st.markdown("<hr style='border: 0.5px solid #E1E4E8; margin: 16px 0;'>", unsafe_allow_html=True)
