@@ -3,14 +3,14 @@ from core.db import run_query, get_db_cursor
 from core.auth import hash_password
 
 def render_admin():
-    st.subheader("⚙️ لوحة الإدارة العليا والتحكم بالمستخدمين والمشاريع")
-    tab_users, tab_projs = st.tabs(["🔐 إدارة المستخدمين وكلمات السر", "🏗️ إضافة المشاريع والمستثمرين"])
+    st.subheader(" لوحة الإدارة العليا والتحكم بالمستخدمين والمشاريع")
+    tab_users, tab_projs = st.tabs([" إدارة المستخدمين وكلمات السر", " إضافة المشاريع والمستثمرين"])
 
     with tab_users:
         st.dataframe(run_query("""
             SELECT u.id AS "المعرف", u.username AS "اسم الدخول", u.full_name AS "الاسم الكامل", 
                    u.role AS "الصلاحية", COALESCE(s.name, 'غير مربوط') AS "الموظف المرتبط", 
-                   CASE WHEN u.is_active THEN 'نشط 🟢' ELSE 'مجمد 🛑' END AS "الحالة"
+                   CASE WHEN u.is_active THEN 'نشط ' ELSE 'مجمد ' END AS "الحالة"
             FROM app_users u LEFT JOIN stakeholders s ON u.stakeholder_id = s.id ORDER BY u.id ASC;
         """).fillna("-"), use_container_width=True, hide_index=True)
 
@@ -28,7 +28,7 @@ def render_admin():
     with tab_projs:
         col_p1, col_p2 = st.columns(2)
         with col_p1:
-            st.markdown("#### ➕ إنشاء مشروع جديد")
+            st.markdown("####  إنشاء مشروع جديد")
             with st.form("new_proj_form", clear_on_submit=True):
                 pn = st.text_input("اسم المشروع")
                 pt_map = {"إكساء وتشطيب": "Finishing", "تطوير عقاري": "Development", "داخلي": "Internal"}
@@ -42,7 +42,7 @@ def render_admin():
                         st.rerun()
 
         with col_p2:
-            st.markdown("#### ➕ تسجيل مستثمر جديد")
+            st.markdown("####  تسجيل مستثمر جديد")
             with st.form("new_inv_form", clear_on_submit=True):
                 inv_name = st.text_input("اسم المستثمر")
                 inv_phone = st.text_input("رقم الهاتف")
