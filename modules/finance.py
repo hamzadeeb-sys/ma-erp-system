@@ -20,56 +20,72 @@ def render_vault_transfers(current_user):
     st.info(f"الرصيد المتاح بالدولار: {usd_avail:,.2f} $ | الرصيد المتاح بالليرة: {syp_avail:,.0f} ل.س")
     
     if current_user['role'] in ["Admin", "Accountant"]:
-        with st.form("transfer_vault_form"):
+        with st.form("transfer_vault_form", clear_on_submit=True):
             ct1, ct2, ct3 = st.columns(3)
             with ct1:
-                tx_dir = st.selectbox("اتجاه العملية", ["من دولار إلى ليرة سورية (بيع دولار)", "من ليرة سورية إلى دولار (شراء دولار)"])
+                tx_dir = st.selectbox(
+                    "اتجاه العملية", 
+                    ["من دولار إلى ليرة سورية (بيع دولار)", "من ليرة سورية إلى دولار (شراء دولار)"],
+                    index=None,
+                    placeholder="اختر اتجاه الصرافة..."
+                )
                 t_date = st.date_input("التاريخ", datetime.now().date())
             with ct2:
-                s_amt = st.number_input("المبلغ المحوّل", min_value=0.0, step=50.0)
-                actual_rate = st.number_input("سعر الصرف الفعلي للعملية", min_value=1.0, value=131.0, step=0.5)
+                s_amt = st.number_input("المبلغ المحوّل", min_value=0.0, value=None, placeholder="0.00", step=50.0)
+                actual_rate = st.number_input("سعر الصرف الفعلي للعملية", min_value=1.0, value=None, placeholder="أدخل السعر الفعلي...", step=0.5)
             with ct3:
-                benchmark_rate = st.number_input("سعر الصرف الدفتري المرجعي", min_value=1.0, value=130.0, step=0.5)
-                calc_res = s_amt * actual_rate if "من دولار" in tx_dir else (s_amt / actual_rate if actual_rate > 0 else 0)
+                benchmark_rate = st.number_input("سعر الصرف الدفتري المرجعي", min_value=1.0, value=None, placeholder="أدخل السعر المعياري...", step=0.5)
+                notes = st.text_input("البيان / مكتب الصرافة", placeholder="أدخل تفاصيل ومكتب الصرافة...")
+
+            amt_val = float(s_amt or 0.0)
+            act_r = float(actual_rate or 0.0)
+            bench_r = float(benchmark_rate or 0.0)
+
+            if tx_dir and amt_val > 0 and act_r > 0:
+                calc_res = amt_val * act_r if "من دولار" in tx_dir else (amt_val / act_r if act_r > 0 else 0)
                 st.markdown(f"**المقابل الدفتري المحتسب:** {calc_res:,.2f}")
-                notes = st.text_input("البيان / مكتب الصرافة", value="صرافة داخلية بين الصناديق")
+            else:
+                calc_res = 0.0
 
             if st.form_submit_button("اعتماد الصرافة وترحيل القيود", icon=":material/sync_alt:"):
-                from_c = "USD" if "من دولار" in tx_dir else "SYP"
-                to_c = "SYP" if "من دولار" in tx_dir else "USD"
-                avail = usd_avail if from_c == "USD" else syp_avail
-                
-                if 0 < s_amt <= avail:
-                    ts = int(datetime.now().timestamp())
-                    v_src = 1 if from_c == "USD" else 2
-                    v_dst = 2 if to_c == "SYP" else 1
-                    amt_usd = s_amt if from_c == "USD" else calc_res
-                    
-                    if from_c == "USD":
-                        fx_diff = (actual_rate - benchmark_rate) * s_amt
-                    else:
-                        fx_diff = (benchmark_rate - actual_rate) * calc_res
-
-                    with get_db_cursor(commit=True) as (cur, _):
-                        cur.execute("""
-                            INSERT INTO transactions (id, tx_date, tx_type, project_id, stakeholder_id, vault_id, amount, currency, exchange_rate, amount_usd, direction, payment_method, description, fx_gain_loss)
-                            VALUES (%s, %s, 'تحويل بين الصناديق (صادر)', 2, 1, %s, %s, %s, %s, %s, 'OUT', 'صرافة', %s, %s);
-                        """, (f"TRF-O-{ts}", t_date, v_src, s_amt, from_c, actual_rate, amt_usd, notes, 0.0))
-                        
-                        cur.execute("""
-                            INSERT INTO transactions (id, tx_date, tx_type, project_id, stakeholder_id, vault_id, amount, currency, exchange_rate, amount_usd, direction, payment_method, description, fx_gain_loss)
-                            VALUES (%s, %s, 'تحويل بين الصناديق (وارد)', 2, 1, %s, %s, %s, %s, %s, 'IN', 'صرافة', %s, %s);
-                        """, (f"TRF-I-{ts}", t_date, v_dst, calc_res, to_c, actual_rate, amt_usd, notes, fx_diff))
-                    
-                    if fx_diff > 0:
-                        st.success(f"تم ترحيل القيدين بنجاح. أرباح فروقات صرف محققة: {fx_diff:,.2f} SYP")
-                    elif fx_diff < 0:
-                        st.warning(f"تم ترحيل القيدين بنجاح. خسائر فروقات صرف: {abs(fx_diff):,.2f} SYP")
-                    else:
-                        st.success("تم ترحيل قيدي الصرافة بنجاح.")
-                    st.rerun()
+                if not tx_dir or amt_val <= 0 or act_r <= 0 or bench_r <= 0:
+                    st.error("يرجى ملء كافة حقول الصرافة وأسعار الصرف بدقة.")
                 else:
-                    st.error("الرصيد المتاح غير كافٍ لإتمام العملية.")
+                    from_c = "USD" if "من دولار" in tx_dir else "SYP"
+                    to_c = "SYP" if "من دولار" in tx_dir else "USD"
+                    avail = usd_avail if from_c == "USD" else syp_avail
+                    
+                    if 0 < amt_val <= avail:
+                        ts = int(datetime.now().timestamp())
+                        v_src = 1 if from_c == "USD" else 2
+                        v_dst = 2 if to_c == "SYP" else 1
+                        amt_usd = amt_val if from_c == "USD" else calc_res
+                        
+                        if from_c == "USD":
+                            fx_diff = (act_r - bench_r) * amt_val
+                        else:
+                            fx_diff = (bench_r - act_r) * calc_res
+
+                        with get_db_cursor(commit=True) as (cur, _):
+                            cur.execute("""
+                                INSERT INTO transactions (id, tx_date, tx_type, project_id, stakeholder_id, vault_id, amount, currency, exchange_rate, amount_usd, direction, payment_method, description, fx_gain_loss)
+                                VALUES (%s, %s, 'تحويل بين الصناديق (صادر)', 2, 1, %s, %s, %s, %s, %s, 'OUT', 'صرافة', %s, %s);
+                            """, (f"TRF-O-{ts}", t_date, v_src, amt_val, from_c, act_r, amt_usd, notes or "صرافة داخلية", 0.0))
+                            
+                            cur.execute("""
+                                INSERT INTO transactions (id, tx_date, tx_type, project_id, stakeholder_id, vault_id, amount, currency, exchange_rate, amount_usd, direction, payment_method, description, fx_gain_loss)
+                                VALUES (%s, %s, 'تحويل بين الصناديق (وارد)', 2, 1, %s, %s, %s, %s, %s, 'IN', 'صرافة', %s, %s);
+                            """, (f"TRF-I-{ts}", t_date, v_dst, calc_res, to_c, act_r, amt_usd, notes or "صرافة داخلية", fx_diff))
+                        
+                        if fx_diff > 0:
+                            st.success(f"تم ترحيل القيدين بنجاح. أرباح فروقات صرف: {fx_diff:,.2f} SYP")
+                        elif fx_diff < 0:
+                            st.warning(f"تم ترحيل القيدين بنجاح. خسائر فروقات صرف: {abs(fx_diff):,.2f} SYP")
+                        else:
+                            st.success("تم ترحيل قيدي الصرافة بنجاح.")
+                        st.rerun()
+                    else:
+                        st.error("الرصيد المتاح في الصندوق المصدر غير كافٍ.")
 
 def render_vouchers_and_reports():
     st.subheader(":material/print: التقارير وتوليد السندات الرسمية")
@@ -84,36 +100,37 @@ def render_vouchers_and_reports():
         """)
         if not tx_options.empty:
             tx_labels = [f"{r['id']} | {r['amount']} {r['currency']} | {r['s_name']}" for _, r in tx_options.iterrows()]
-            chosen_label = st.selectbox("اختر السند المالي المطلوب:", tx_labels)
-            chosen_id = chosen_label.split(" | ")[0]
+            chosen_label = st.selectbox("اختر السند المالي المطلوب:", tx_labels, index=None, placeholder="اختر السند...")
+            
+            if chosen_label:
+                chosen_id = chosen_label.split(" | ")[0]
+                with get_db_cursor() as (cur, _):
+                    cur.execute("""
+                        SELECT t.id, t.tx_date, t.tx_type, COALESCE(p.name, 'عام'), COALESCE(s.name, 'عام'), 
+                               t.amount, t.currency, t.exchange_rate, t.amount_usd, t.payment_method, t.description 
+                        FROM transactions t 
+                        LEFT JOIN projects p ON t.project_id = p.id 
+                        LEFT JOIN stakeholders s ON t.stakeholder_id = s.id 
+                        WHERE t.id = %s;
+                    """, (chosen_id,))
+                    tx_r = cur.fetchone()
+                    tx_dict = {
+                        'id': tx_r[0], 'tx_date': tx_r[1], 'tx_type': tx_r[2], 
+                        'project_name': tx_r[3], 'stakeholder_name': tx_r[4], 
+                        'amount': float(tx_r[5]), 'currency': tx_r[6], 
+                        'exchange_rate': float(tx_r[7]), 'amount_usd': float(tx_r[8]), 
+                        'payment_method': tx_r[9], 'description': tx_r[10] or ''
+                    }
+                    cur.execute("""
+                        SELECT item_name, category, quantity, unit_price, total_price 
+                        FROM invoice_items 
+                        WHERE transaction_id = %s 
+                        ORDER BY id ASC;
+                    """, (chosen_id,))
+                    items_r = cur.fetchall()
 
-            with get_db_cursor() as (cur, _):
-                cur.execute("""
-                    SELECT t.id, t.tx_date, t.tx_type, COALESCE(p.name, 'عام'), COALESCE(s.name, 'عام'), 
-                           t.amount, t.currency, t.exchange_rate, t.amount_usd, t.payment_method, t.description 
-                    FROM transactions t 
-                    LEFT JOIN projects p ON t.project_id = p.id 
-                    LEFT JOIN stakeholders s ON t.stakeholder_id = s.id 
-                    WHERE t.id = %s;
-                """, (chosen_id,))
-                tx_r = cur.fetchone()
-                tx_dict = {
-                    'id': tx_r[0], 'tx_date': tx_r[1], 'tx_type': tx_r[2], 
-                    'project_name': tx_r[3], 'stakeholder_name': tx_r[4], 
-                    'amount': float(tx_r[5]), 'currency': tx_r[6], 
-                    'exchange_rate': float(tx_r[7]), 'amount_usd': float(tx_r[8]), 
-                    'payment_method': tx_r[9], 'description': tx_r[10] or ''
-                }
-                cur.execute("""
-                    SELECT item_name, category, quantity, unit_price, total_price 
-                    FROM invoice_items 
-                    WHERE transaction_id = %s 
-                    ORDER BY id ASC;
-                """, (chosen_id,))
-                items_r = cur.fetchall()
-
-            pdf_bytes = generate_receipt_pdf(tx_dict, items_r)
-            st.download_button("تحميل وثيقة السند (PDF)", data=pdf_bytes, file_name=f"Voucher_{chosen_id}.pdf", mime="application/pdf", icon=":material/download:")
+                pdf_bytes = generate_receipt_pdf(tx_dict, items_r)
+                st.download_button("تحميل وثيقة السند (PDF)", data=pdf_bytes, file_name=f"Voucher_{chosen_id}.pdf", mime="application/pdf", icon=":material/download:")
 
     with tab_ex:
         df_all_tx = run_query("""
@@ -170,58 +187,71 @@ def render_add_invoice(current_user):
             with st.form("simple_tx_form", clear_on_submit=True):
                 ca1, ca2, ca3 = st.columns(3)
                 with ca1:
-                    inv_id = st.text_input("رقم السند", value=auto_inv)
+                    # الرقم التسلسلي مقفل نهائياً
+                    st.text_input("رقم السند (توليد آلي غير قابل للتعديل)", value=auto_inv, disabled=True)
                     t_date = st.date_input("التاريخ", datetime.now().date())
-                    t_type = st.selectbox("نوع الحركة", ["دفعة لمشروع", "مقبوضات من مستثمر", "مصروف عام", "راتب او سلفة", "توزيع أرباح شريك", "ايراد عام"])
+                    t_type = st.selectbox(
+                        "نوع الحركة", 
+                        ["دفعة لمشروع", "مقبوضات من مستثمر", "مصروف عام", "راتب او سلفة", "توزيع أرباح شريك", "ايراد عام"],
+                        index=None,
+                        placeholder="اختر نوع الحركة..."
+                    )
                 with ca2:
-                    p_name = st.selectbox("المشروع", projs['name'].tolist())
-                    part_name = st.selectbox("الطرف", parties['name'].tolist())
-                    method = st.selectbox("طريقة الدفع", ["كاش (نقداً)", "حوالة مصرفية", "شيك بنكي"])
+                    p_name = st.selectbox("المشروع", projs['name'].tolist(), index=None, placeholder="اختر المشروع...")
+                    part_name = st.selectbox("الطرف", parties['name'].tolist(), index=None, placeholder="اختر الطرف...")
+                    method = st.selectbox("طريقة الدفع", ["كاش (نقداً)", "حوالة مصرفية", "شيك بنكي"], index=None, placeholder="اختر طريقة الدفع...")
                 with ca3:
-                    curr_choice = st.selectbox("العملة", ["USD", "SYP"])
-                    rate_val = st.number_input("سعر الصرف", min_value=1.0, value=1.0 if curr_choice == "USD" else 131.0)
-                    amount_val = st.number_input("المبلغ الإجمالي", min_value=0.0, step=50.0)
+                    curr_choice = st.selectbox("العملة", ["USD", "SYP"], index=None, placeholder="اختر العملة...")
+                    rate_val = st.number_input("سعر الصرف", min_value=1.0, value=None, placeholder="أدخل سعر الصرف...", step=0.5)
+                    amount_val = st.number_input("المبلغ الإجمالي", min_value=0.0, value=None, placeholder="0.00", step=50.0)
 
-                desc_val = st.text_area("البيان والملاحظات")
+                desc_val = st.text_area("البيان والملاحظات", placeholder="أدخل البيان والتفاصيل...")
+                
                 if st.form_submit_button("حفظ وترحيل السند المالي", icon=":material/save:"):
-                    if amount_val > 0:
+                    a_val = float(amount_val or 0.0)
+                    r_val = float(rate_val or 1.0)
+                    if not p_name or not part_name or not t_type or not curr_choice or not method or a_val <= 0:
+                        st.error("يرجى تعبئة كافة الحقول الإلزامية وتحديد الأطراف والمبالغ.")
+                    else:
                         p_id = int(projs.loc[projs['name'] == p_name, 'id'].values[0])
                         s_id = int(parties.loc[parties['name'] == part_name, 'id'].values[0])
                         v_id = 1 if curr_choice == 'USD' else 2
                         dir_m = 'IN' if any(k in t_type for k in ['مقبوضات', 'ايراد']) else 'OUT'
-                        amt_u = float(amount_val if curr_choice == 'USD' else (amount_val / rate_val))
+                        amt_u = float(a_val if curr_choice == 'USD' else (a_val / r_val))
                         with get_db_cursor(commit=True) as (cur, _):
                             cur.execute("""
                                 INSERT INTO transactions (id, tx_date, tx_type, project_id, stakeholder_id, vault_id, amount, currency, exchange_rate, amount_usd, direction, payment_method, description)
                                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
-                            """, (str(inv_id), t_date, str(t_type), p_id, s_id, v_id, float(amount_val), curr_choice, float(rate_val), float(amt_u), dir_m, method, desc_val))
-                        st.success(f"تم ترحيل السند {inv_id} بنجاح.")
+                            """, (str(auto_inv), t_date, str(t_type), p_id, s_id, v_id, a_val, curr_choice, r_val, amt_u, dir_m, method, desc_val or ""))
+                        st.success(f"تم ترحيل السند {auto_inv} بنجاح.")
                         st.rerun()
 
         else:
             c1, c2, c3 = st.columns(3)
             with c1:
-                inv_id_m = st.text_input("رقم الفاتورة", value=auto_inv)
+                # الرقم التسلسلي مقفل نهائياً
+                st.text_input("رقم الفاتورة (توليد آلي مقفل)", value=auto_inv, disabled=True)
                 t_date_m = st.date_input("التاريخ", datetime.now().date())
             with c2:
-                p_name_m = st.selectbox("المشروع", projs['name'].tolist())
-                t_type_m = st.selectbox("نوع الحركة", ["دفعة لمشروع", "شراء مواد وتخزين", "مصروف عام", "ايراد عام"])
+                p_name_m = st.selectbox("المشروع", projs['name'].tolist(), index=None, placeholder="اختر المشروع...", key="multi_inv_proj")
+                t_type_m = st.selectbox("نوع الحركة", ["دفعة لمشروع", "شراء مواد وتخزين", "مصروف عام", "ايراد عام"], index=None, placeholder="اختر نوع الحركة...", key="multi_inv_type")
             with c3:
-                curr_m = st.selectbox("العملة", ["USD", "SYP"])
-                rate_m = st.number_input("سعر الصرف", min_value=1.0, value=1.0 if curr_m == "USD" else 131.0)
-                method_m = st.selectbox("طريقة الدفع", ["كاش (نقداً)", "حوالة مصرفية", "شيك بنكي"])
+                curr_m = st.selectbox("العملة", ["USD", "SYP"], index=None, placeholder="اختر العملة...", key="multi_inv_curr")
+                rate_m = st.number_input("سعر الصرف", min_value=1.0, value=None, placeholder="أدخل سعر الصرف...", step=0.5, key="multi_inv_rate")
+                method_m = st.selectbox("طريقة الدفع", ["كاش (نقداً)", "حوالة مصرفية", "شيك بنكي"], index=None, placeholder="اختر طريقة الدفع...", key="multi_inv_method")
 
-            desc_m = st.text_input("البيان العام", value="فاتورة مواد وتنفيذ متعددة البنود")
+            desc_m = st.text_input("البيان العام", placeholder="أدخل البيان العام للفاتورة...", key="multi_inv_desc")
             cats = ["مواد بناء وتأسيس", "إكساء وتشطيب", "أجور معلمين", "أدوات ومعدات", "نقل وشحن", "أخرى"]
             p_list = parties['name'].tolist()
 
+            # جدول البنود: صف أولي فارغ تماماً من القيم المسبقة
             default_df = pd.DataFrame([{
-                "اسم البند": stock_item_names[0] if stock_item_names else "", 
-                "التصنيف": cats[0], 
-                "الكمية": 1.0, 
+                "اسم البند": "", 
+                "التصنيف": None, 
+                "الكمية": 0.0, 
                 "السعر الإفرادي": 0.0, 
-                "الطرف المستفيد": p_list[0],
-                "خصم من المخزون تلقائياً": True if stock_item_names else False
+                "الطرف المستفيد": None, 
+                "خصم من المخزون تلقائياً": False
             }])
             
             edited_df = st.data_editor(
@@ -231,25 +261,34 @@ def render_add_invoice(current_user):
                 column_config={
                     "اسم البند": st.column_config.TextColumn("اسم البند / المادة (يطابق المخزون)", required=True),
                     "التصنيف": st.column_config.SelectboxColumn("التصنيف", options=cats, required=True),
-                    "الكمية": st.column_config.NumberColumn("الكمية", min_value=0.01, default=1.0),
+                    "الكمية": st.column_config.NumberColumn("الكمية", min_value=0.01, default=0.0),
                     "السعر الإفرادي": st.column_config.NumberColumn("السعر الإفرادي", min_value=0.0, default=0.0),
                     "الطرف المستفيد": st.column_config.SelectboxColumn("الطرف المستفيد", options=p_list, required=True),
                     "خصم من المخزون تلقائياً": st.column_config.CheckboxColumn("خصم مخزني", default=False)
                 }
             )
 
-            valid_items = edited_df[edited_df["اسم البند"].str.strip() != ""].copy()
+            valid_items = edited_df[
+                (edited_df["اسم البند"].astype(str).str.strip() != "") & 
+                (edited_df["الطرف المستفيد"].notna()) &
+                (edited_df["التصنيف"].notna())
+            ].copy()
+
             if not valid_items.empty:
                 valid_items["المجموع"] = valid_items["الكمية"].astype(float) * valid_items["السعر الإفرادي"].astype(float)
                 total_computed = float(valid_items["المجموع"].sum())
-                st.markdown(f"### الإجمالي المحتسب: **{total_computed:,.2f} {curr_m}**")
+                curr_symbol = curr_m if curr_m else ""
+                st.markdown(f"### الإجمالي المحتسب: **{total_computed:,.2f} {curr_symbol}**")
 
-                if st.form_submit_button if hasattr(st, "form_submit_button_fake") else st.button("حفظ الفاتورة ومعالجة قيود المخزون", icon=":material/save:"):
-                    if total_computed > 0:
+                if st.button("حفظ الفاتورة ومعالجة قيود المخزون", icon=":material/save:"):
+                    r_val_m = float(rate_m or 1.0)
+                    if not p_name_m or not t_type_m or not curr_m or not method_m or total_computed <= 0:
+                        st.error("يرجى تحديد المشروع، نوع الحركة، العملة، طريقة الدفع، والتأكد من إجماليات البنود.")
+                    else:
                         p_id = int(projs.loc[projs['name'] == p_name_m, 'id'].values[0])
                         v_id = 1 if curr_m == 'USD' else 2
                         dir_m = 'IN' if any(k in t_type_m for k in ['مقبوضات', 'ايراد']) else 'OUT'
-                        amt_u = float(total_computed if curr_m == 'USD' else (total_computed / rate_m))
+                        amt_u = float(total_computed if curr_m == 'USD' else (total_computed / r_val_m))
                         first_party = valid_items.iloc[0]["الطرف المستفيد"]
                         primary_s_id = int(parties.loc[parties['name'] == first_party, 'id'].values[0])
 
@@ -258,7 +297,7 @@ def render_add_invoice(current_user):
                                 cur.execute("""
                                     INSERT INTO transactions (id, tx_date, tx_type, project_id, stakeholder_id, vault_id, amount, currency, exchange_rate, amount_usd, direction, payment_method, description)
                                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
-                                """, (str(inv_id_m), t_date_m, str(t_type_m), p_id, primary_s_id, v_id, total_computed, curr_m, rate_m, amt_u, dir_m, method_m, desc_m))
+                                """, (str(auto_inv), t_date_m, str(t_type_m), p_id, primary_s_id, v_id, total_computed, curr_m, r_val_m, amt_u, dir_m, method_m, desc_m or ""))
                                 
                                 for _, r in valid_items.iterrows():
                                     i_name = str(r["اسم البند"]).strip()
@@ -296,14 +335,14 @@ def render_add_invoice(current_user):
                                         cur.execute("""
                                             INSERT INTO inventory_issues (transaction_id, item_name, project_id, quantity, unit_cost)
                                             VALUES (%s, %s, %s, %s, %s);
-                                        """, (str(inv_id_m), i_name, p_id, i_qty, unit_cost_val))
+                                        """, (str(auto_inv), i_name, p_id, i_qty, unit_cost_val))
 
                                     cur.execute("""
                                         INSERT INTO invoice_items (transaction_id, item_name, category, quantity, unit_price, total_price, stakeholder_id, currency, affects_inventory)
                                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);
-                                    """, (str(inv_id_m), i_name, str(r["التصنيف"]), i_qty, i_price, i_tot, i_stk_id, curr_m, affects_inv))
+                                    """, (str(auto_inv), i_name, str(r["التصنيف"]), i_qty, i_price, i_tot, i_stk_id, curr_m, affects_inv))
 
-                            st.success(f"تم ترحيل الفاتورة {inv_id_m} وتحديث الأرصدة بنجاح.")
+                            st.success(f"تم ترحيل الفاتورة {auto_inv} وتحديث الأرصدة بنجاح.")
                             st.rerun()
                         except Exception as e:
                             st.error(f"تم التراجع عن القيد (Rollback): {e}")
@@ -313,67 +352,71 @@ def render_edit_transactions(current_user):
         st.subheader(":material/edit_note: استعراض وإلغاء القيود المالية")
         all_tx = run_query("SELECT id, tx_date, amount, currency, description FROM transactions ORDER BY tx_date DESC LIMIT 50;")
         if not all_tx.empty:
-            sel_str = st.selectbox("اختر السند / الفاتورة:", [f"{r['id']} | {r['tx_date']} | {r['amount']} {r['currency']} | {r['description']}" for _, r in all_tx.iterrows()])
-            sel_id = sel_str.split(" | ")[0]
-            
-            if st.button(f"حذف الفاتورة {sel_id} واسترجاع المخزون", icon=":material/delete:"):
-                try:
-                    with get_db_cursor(commit=True) as (cur, _):
-                        cur.execute("""
-                            SELECT item_name, quantity 
-                            FROM inventory_issues 
-                            WHERE transaction_id = %s;
-                        """, (sel_id,))
-                        issued_records = cur.fetchall()
-
-                        for it_name, it_q in issued_records:
+            sel_str = st.selectbox(
+                "اختر السند / الفاتورة المراد إلغاؤها:", 
+                [f"{r['id']} | {r['tx_date']} | {r['amount']} {r['currency']} | {r['description']}" for _, r in all_tx.iterrows()],
+                index=None,
+                placeholder="اختر السند..."
+            )
+            if sel_str:
+                sel_id = sel_str.split(" | ")[0]
+                if st.button(f"حذف الفاتورة {sel_id} واسترجاع المخزون", icon=":material/delete:"):
+                    try:
+                        with get_db_cursor(commit=True) as (cur, _):
                             cur.execute("""
-                                UPDATE inventory_stock 
-                                SET quantity_on_hand = quantity_on_hand + %s 
-                                WHERE item_name = %s;
-                            """, (float(it_q), it_name))
+                                SELECT item_name, quantity 
+                                FROM inventory_issues 
+                                WHERE transaction_id = %s;
+                            """, (sel_id,))
+                            issued_records = cur.fetchall()
 
-                        cur.execute("DELETE FROM inventory_issues WHERE transaction_id = %s;", (sel_id,))
-                        cur.execute("DELETE FROM invoice_items WHERE transaction_id = %s;", (sel_id,))
-                        cur.execute("DELETE FROM transactions WHERE id = %s;", (sel_id,))
-                    
-                    st.success(f"تم حذف الفاتورة {sel_id} واستعادة قيود المخزون.")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"خطأ أثناء الحذف: {e}")
+                            for it_name, it_q in issued_records:
+                                cur.execute("""
+                                    UPDATE inventory_stock 
+                                    SET quantity_on_hand = quantity_on_hand + %s 
+                                    WHERE item_name = %s;
+                                """, (float(it_q), it_name))
+
+                            cur.execute("DELETE FROM inventory_issues WHERE transaction_id = %s;", (sel_id,))
+                            cur.execute("DELETE FROM invoice_items WHERE transaction_id = %s;", (sel_id,))
+                            cur.execute("DELETE FROM transactions WHERE id = %s;", (sel_id,))
+                        
+                        st.success(f"تم حذف الفاتورة {sel_id} واستعادة قيود المخزون.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"خطأ أثناء الحذف: {e}")
 
 def render_investor_statements():
     st.subheader(":material/manage_accounts: كشوفات حسابات المستثمرين")
     all_projs = run_query("SELECT id, name, management_fee_rate FROM projects WHERE project_type NOT IN ('Internal', 'Factory') ORDER BY name;")
     if not all_projs.empty:
-        selected_proj = st.selectbox("المشروع المستهدف", all_projs['name'].tolist())
-        p_row = all_projs[all_projs['name'] == selected_proj].iloc[0]
-        p_id = int(p_row['id'])
-        f_rate = float(p_row['management_fee_rate'])
+        selected_proj = st.selectbox("المشروع المستهدف", all_projs['name'].tolist(), index=None, placeholder="اختر المشروع لعرض كشفه...")
+        if selected_proj:
+            p_row = all_projs[all_projs['name'] == selected_proj].iloc[0]
+            p_id = int(p_row['id'])
+            f_rate = float(p_row['management_fee_rate'])
 
-        with get_db_cursor() as (cur, _):
-            cur.execute("SELECT COALESCE(SUM(amount_usd), 0) FROM transactions WHERE project_id = %s AND direction = 'IN';", (p_id,))
-            paid_in = float(cur.fetchone()[0] or 0.0)
-            cur.execute("SELECT COALESCE(SUM(amount_usd), 0) FROM transactions WHERE project_id = %s AND direction = 'OUT';", (p_id,))
-            costs_out = float(cur.fetchone()[0] or 0.0)
+            with get_db_cursor() as (cur, _):
+                cur.execute("SELECT COALESCE(SUM(amount_usd), 0) FROM transactions WHERE project_id = %s AND direction = 'IN';", (p_id,))
+                paid_in = float(cur.fetchone()[0] or 0.0)
+                cur.execute("SELECT COALESCE(SUM(amount_usd), 0) FROM transactions WHERE project_id = %s AND direction = 'OUT';", (p_id,))
+                costs_out = float(cur.fetchone()[0] or 0.0)
 
-        mgmt_fee = costs_out * f_rate
-        net_balance = (costs_out + mgmt_fee) - paid_in
+            mgmt_fee = costs_out * f_rate
+            net_balance = (costs_out + mgmt_fee) - paid_in
 
-        c1, c2, c3, c4 = st.columns(4)
-        with c1: st.metric("المقبوض من المستثمر", f"{paid_in:,.2f} $")
-        with c2: st.metric("تكاليف التنفيذ", f"{costs_out:,.2f} $")
-        with c3: st.metric(f"أتعاب الإدارة ({f_rate*100:.0f}%)", f"{mgmt_fee:,.2f} $")
-        with c4: st.metric("الصافي المستحق", f"{net_balance:,.2f} $")
+            c1, c2, c3, c4 = st.columns(4)
+            with c1: st.metric("المقبوض من المستثمر", f"{paid_in:,.2f} $")
+            with c2: st.metric("تكاليف التنفيذ", f"{costs_out:,.2f} $")
+            with c3: st.metric(f"أتعاب الإدارة ({f_rate*100:.0f}%)", f"{mgmt_fee:,.2f} $")
+            with c4: st.metric("الصافي المستحق", f"{net_balance:,.2f} $")
 
-        df_inv_tx = run_query("""
-            SELECT id AS "رقم الفاتورة", tx_date AS "التاريخ", tx_type AS "نوع الحركة",
-                   amount AS "المبلغ", currency AS "العملة", amount_usd AS "المعادل بالدولار ($)", description AS "البيان"
-            FROM transactions WHERE project_id = %s ORDER BY tx_date DESC;
-        """, (p_id,))
-        st.dataframe(df_inv_tx.fillna("-"), use_container_width=True, hide_index=True)
-    else:
-        st.info("لا توجد مشاريع مسجلة.")
+            df_inv_tx = run_query("""
+                SELECT id AS "رقم الفاتورة", tx_date AS "التاريخ", tx_type AS "نوع الحركة",
+                       amount AS "المبلغ", currency AS "العملة", amount_usd AS "المعادل بالدولار ($)", description AS "البيان"
+                FROM transactions WHERE project_id = %s ORDER BY tx_date DESC;
+            """, (p_id,))
+            st.dataframe(df_inv_tx.fillna("-"), use_container_width=True, hide_index=True)
 
 def render_projects_overview():
     st.subheader(":material/domain: كشف أتعاب الإدارة وتكاليف المشاريع")
