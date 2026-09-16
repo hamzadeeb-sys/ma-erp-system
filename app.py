@@ -1,522 +1,435 @@
 import streamlit as st
-import os
-import base64
+import pandas as pd
+from datetime import datetime
+from core.db import run_query, get_db_cursor
+from core.utils import to_excel_download_link, get_next_invoice_id
+from core.pdf_engine import generate_receipt_pdf
 
-from core.auth import authenticate_user
-from modules.dashboard import render_dashboard
-from modules.stone_factory import render_stone_factory
-from modules.partners import render_partners
-from modules.finance import (
-    render_vault_transfers,
-    render_vouchers_and_reports,
-    render_transactions_ledger,
-    render_add_invoice,
-    render_edit_transactions,
-    render_investor_statements,
-    render_projects_overview
-)
-from modules.hr import (
-    render_attendance,
-    render_payroll,
-    render_employee_portal
-)
-from modules.operations import (
-    render_inventory,
-    render_stakeholders,
-    render_appointments
-)
-from modules.admin import render_admin
+def render_vault_transfers(current_user):
+    st.subheader(":material/currency_exchange: المصارفة والتحويل المالي بين الصناديق")
+    df_v = run_query("""
+        SELECT id, currency, COALESCE(SUM(CASE WHEN t.direction = 'IN' THEN t.amount ELSE -t.amount END), 0) AS balance 
+        FROM vaults v 
+        LEFT JOIN transactions t ON v.id = t.vault_id 
+        WHERE v.name NOT LIKE '%معمل الحجر%' 
+        GROUP BY v.id, v.currency;
+    """)
+    usd_avail = float(df_v.loc[df_v['currency'] == 'USD', 'balance'].values[0]) if not df_v.empty and 'USD' in df_v['currency'].values else 0.0
+    syp_avail = float(df_v.loc[df_v['currency'] == 'SYP', 'balance'].values[0]) if not df_v.empty and 'SYP' in df_v['currency'].values else 0.0
 
-# ----------------------------------------------------
-# 1. إعدادات الصفحة وتحميل اللوغو كـ Base64
-# ----------------------------------------------------
-def get_image_base64(image_path: str):
-    if os.path.exists(image_path):
-        with open(image_path, "rb") as img_file:
-            return f"data:image/png;base64,{base64.b64encode(img_file.read()).decode()}"
-    return None
-
-logo_filename = "MA Logo.png"
-logo_base64 = get_image_base64(logo_filename)
-
-st.set_page_config(
-    page_title="شركة MA العقارية | منظومة الإدارة والرقابة المالية",
-    page_icon=logo_filename if os.path.exists(logo_filename) else "🏛️",
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
-
-# ----------------------------------------------------
-# 2. الهوية البصرية وشبكة الـ Responsive Fluid Grid
-# ----------------------------------------------------
-st.markdown("""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
-    @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
+    st.info(f"الرصيد المتاح بالدولار: {usd_avail:,.2f} $ | الرصيد المتاح بالليرة: {syp_avail:,.0f} ل.س")
     
-    html, body, [class*="css"] { 
-        font-family: 'Cairo', sans-serif !important; 
-    }
-    
-    /* ضبط اتجاه الواجهة العام RTL */
-    .block-container, p, label, .stMarkdown, .stText, h1, h2, h3, h4, h5, h6 {
-        direction: rtl !important;
-        text-align: right !important;
-    }
-    
-    /* ضبط محاذاة الأيقونات المتجهة */
-    span[data-testid="stIconMaterial"] {
-        font-family: 'Material Symbols Outlined' !important;
-        vertical-align: middle !important;
-        font-size: 1.15rem !important;
-    }
+    if current_user['role'] in ["Admin", "Accountant"]:
+        with st.form("transfer_vault_form", clear_on_submit=True):
+            ct1, ct2, ct3 = st.columns(3)
+            with ct1:
+                tx_dir = st.selectbox(
+                    "اتجاه العملية", 
+                    ["من دولار إلى ليرة سورية (بيع دولار)", "من ليرة سورية إلى دولار (شراء دولار)"],
+                    index=None,
+                    placeholder="اختر اتجاه الصرافة..."
+                )
+                t_date = st.date_input("التاريخ", datetime.now().date())
+            with ct2:
+                s_amt = st.number_input("المبلغ المحوّل", min_value=0.0, value=None, placeholder="0.00", step=50.0)
+                actual_rate = st.number_input("سعر الصرف الفعلي للعملية", min_value=1.0, value=None, placeholder="أدخل السعر الفعلي...", step=0.5)
+            with ct3:
+                benchmark_rate = st.number_input("سعر الصرف الدفتري المرجعي", min_value=1.0, value=None, placeholder="أدخل السعر المعياري...", step=0.5)
+                notes = st.text_input("البيان / مكتب الصرافة", placeholder="أدخل تفاصيل ومكتب الصرافة...")
 
-    /* عزل محرك Glide Data Grid لمنع تشوه الأعمدة */
-    [data-testid="stDataFrame"], 
-    [data-testid="stDataEditor"],
-    [data-testid="stDataFrame"] *, 
-    [data-testid="stDataEditor"] * {
-        direction: ltr !important;
-        text-align: left !important;
-    }
+            amt_val = float(s_amt or 0.0)
+            act_r = float(actual_rate or 0.0)
+            bench_r = float(benchmark_rate or 0.0)
 
-    /* إخفاء السايدبار والهيدر الأصلي */
-    [data-testid="stSidebar"], 
-    [data-testid="collapsedControl"], 
-    header[data-testid="stHeader"],
-    #MainMenu, 
-    footer, 
-    .stAppDeployButton,
-    [data-testid="stToolbar"],
-    div[data-testid="stDecoration"] {
-        display: none !important;
-        visibility: hidden !important;
-    }
+            if tx_dir and amt_val > 0 and act_r > 0:
+                calc_res = amt_val * act_r if "من دولار" in tx_dir else (amt_val / act_r if act_r > 0 else 0)
+                st.markdown(f"**المقابل الدفتري المحتسب:** {calc_res:,.2f}")
+            else:
+                calc_res = 0.0
 
-    .stApp { 
-        background-color: #F9F9F8 !important; 
-    }
-
-    /* شارة الهوية المؤسسية الموحدة مع الشعار */
-    .brand-header-badge {
-        background-color: #0F4733;
-        color: #FFFFFF;
-        padding: 6px 14px;
-        border-radius: 6px;
-        border: 1px solid #BE9D5F;
-        font-weight: 700;
-        font-size: 0.92rem;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 8px;
-        box-shadow: 0 1px 3px rgba(15, 71, 51, 0.15);
-    }
-    .brand-header-logo {
-        height: 24px;
-        width: auto;
-        object-fit: contain;
-    }
-
-    /* تحويل صف البطاقات إلى Responsive Flex Grid ديناميكي حر */
-    div[data-testid="stHorizontalBlock"]:has(.portal-card-anchor) {
-        display: flex !important;
-        flex-wrap: wrap !important;
-        gap: 16px !important;
-        width: 100% !important;
-        align-items: stretch !important;
-    }
-
-    div[data-testid="stHorizontalBlock"]:has(.portal-card-anchor) > div[data-testid="column"] {
-        flex: 1 1 280px !important;
-        min-width: 270px !important;
-        max-width: 100% !important;
-        width: auto !important;
-    }
-
-    /* توحيد ارتفاع وتنسيق بطاقات القطاعات */
-    div[data-testid="stHorizontalBlock"]:has(.portal-card-anchor) [data-testid="stVerticalBlockBorderWrapper"] {
-        background-color: #FFFFFF !important;
-        border: 1px solid #D0D7DE !important;
-        border-top: 4px solid #0F4733 !important;
-        border-radius: 8px !important;
-        box-shadow: 0 1px 3px rgba(31, 35, 40, 0.05) !important;
-        padding: 16px !important;
-        height: 100% !important;
-        display: flex !important;
-        flex-direction: column !important;
-        justify-content: space-between !important;
-    }
-
-    /* بطاقات المؤشرات الرقمية */
-    .metric-card { 
-        background: #FFFFFF; 
-        border-radius: 6px; 
-        padding: 16px 20px; 
-        border: 1px solid #D0D7DE; 
-        border-top: 4px solid #0F4733; 
-        box-shadow: 0 1px 3px rgba(31, 35, 40, 0.04); 
-        margin-bottom: 15px; 
-        direction: rtl; 
-        text-align: center !important; 
-    }
-    .metric-title { 
-        color: #57606A; 
-        font-size: 0.85rem; 
-        font-weight: 600; 
-        margin-bottom: 6px; 
-        text-align: center !important; 
-    }
-    .metric-value-usd { 
-        color: #0F4733; 
-        font-size: 1.75rem; 
-        font-weight: 800; 
-        text-align: center !important; 
-    }
-    .metric-value-gold { 
-        color: #BE9D5F; 
-        font-size: 1.75rem; 
-        font-weight: 800; 
-        text-align: center !important; 
-    }
-    
-    input, textarea, select, div[data-baseweb="select"] > div { 
-        background-color: #FFFFFF !important; 
-        border: 1px solid #D0D7DE !important; 
-        border-radius: 6px !important; 
-        direction: rtl !important; 
-        text-align: right !important; 
-    }
-
-    .stButton > button, .stDownloadButton > button { 
-        background-color: #0F4733 !important; 
-        color: #FFFFFF !important; 
-        border: 1px solid #0F4733 !important; 
-        border-radius: 6px !important; 
-        padding: 6px 18px !important; 
-        font-weight: 600 !important; 
-        font-size: 0.9rem !important;
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-        margin-top: 4px !important;
-    }
-    .stButton > button:hover, .stDownloadButton > button:hover { 
-        background-color: #BE9D5F !important; 
-        border-color: #BE9D5F !important;
-        color: #0F4733 !important; 
-    }
-    </style>
-""", unsafe_allow_html=True)
-
-# ----------------------------------------------------
-# 3. إدارة الجلسة والمصادقة
-# ----------------------------------------------------
-if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
-    st.session_state.user_info = None
-
-if not st.session_state.authenticated:
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    _, c_log, _ = st.columns([1, 1.5, 1])
-    with c_log:
-        logo_html = f'<img src="{logo_base64}" style="height: 60px; margin-bottom: 8px;">' if logo_base64 else ''
-        st.markdown(f"""
-            <div style="text-align: center; margin-bottom: 25px;">
-                {logo_html}
-                <h2 style="color: #0F4733; margin: 0; font-weight: 800;">منظومة الإدارة والرقابة المالية</h2>
-                <div style="color: #BE9D5F; font-weight: 700; margin-top: 4px;">شركة MA للتطوير العقاري والمقاولات</div>
-            </div>
-        """, unsafe_allow_html=True)
-        with st.form("login_form"):
-            st.markdown("##### :material/lock: تسجيل الدخول إلى المنظومة")
-            u_input = st.text_input("اسم المستخدم")
-            p_input = st.text_input("كلمة المرور", type="password")
-            if st.form_submit_button("تسجيل الدخول", icon=":material/login:"):
-                if u_input and p_input:
-                    user_data = authenticate_user(u_input, p_input)
-                    if user_data:
-                        if not user_data["is_active"]:
-                            st.error("الحساب معطل حالياً، راجع إدارة النظام.")
-                        else:
-                            st.session_state.authenticated = True
-                            st.session_state.user_info = user_data
-                            st.session_state.current_page = "HOME"
-                            st.rerun()
-                    else:
-                        st.error("اسم المستخدم أو كلمة المرور غير صحيحة.")
+            if st.form_submit_button("اعتماد الصرافة وترحيل القيود", icon=":material/sync_alt:"):
+                if not tx_dir or amt_val <= 0 or act_r <= 0 or bench_r <= 0:
+                    st.error("يرجى ملء كافة حقول الصرافة وتحديد أسعار الصرف بدقة.")
                 else:
-                    st.warning("يرجى إدخال بيانات تسجيل الدخول.")
-    st.stop()
+                    from_c = "USD" if "من دولار" in tx_dir else "SYP"
+                    to_c = "SYP" if "من دولار" in tx_dir else "USD"
+                    avail = usd_avail if from_c == "USD" else syp_avail
+                    
+                    if 0 < amt_val <= avail:
+                        ts = int(datetime.now().timestamp())
+                        v_src = 1 if from_c == "USD" else 2
+                        v_dst = 2 if to_c == "SYP" else 1
+                        amt_usd = amt_val if from_c == "USD" else calc_res
+                        
+                        if from_c == "USD":
+                            fx_diff = (act_r - bench_r) * amt_val
+                        else:
+                            fx_diff = (bench_r - act_r) * calc_res
 
-# ----------------------------------------------------
-# 4. كتالوج المنظومة والأدوار
-# ----------------------------------------------------
-current_user = st.session_state.user_info
-user_role = current_user['role']
-factory_menu_title = "حسابات وخزنة معمل الحجر"
+                        with get_db_cursor(commit=True) as (cur, _):
+                            cur.execute("""
+                                INSERT INTO transactions (id, tx_date, tx_type, project_id, stakeholder_id, vault_id, amount, currency, exchange_rate, amount_usd, direction, payment_method, description, fx_gain_loss)
+                                VALUES (%s, %s, 'تحويل بين الصناديق (صادر)', 2, 1, %s, %s, %s, %s, %s, 'OUT', 'صرافة', %s, %s);
+                            """, (f"TRF-O-{ts}", t_date, v_src, amt_val, from_c, act_r, amt_usd, notes or "صرافة داخلية", 0.0))
+                            
+                            cur.execute("""
+                                INSERT INTO transactions (id, tx_date, tx_type, project_id, stakeholder_id, vault_id, amount, currency, exchange_rate, amount_usd, direction, payment_method, description, fx_gain_loss)
+                                VALUES (%s, %s, 'تحويل بين الصناديق (وارد)', 2, 1, %s, %s, %s, %s, %s, 'IN', 'صرافة', %s, %s);
+                            """, (f"TRF-I-{ts}", t_date, v_dst, calc_res, to_c, act_r, amt_usd, notes or "صرافة داخلية", fx_diff))
+                        
+                        if fx_diff > 0:
+                            st.success(f"تم ترحيل القيدين بنجاح. أرباح فروقات صرف: {fx_diff:,.2f} SYP")
+                        elif fx_diff < 0:
+                            st.warning(f"تم ترحيل القيدين بنجاح. خسائر فروقات صرف: {abs(fx_diff):,.2f} SYP")
+                        else:
+                            st.success("تم ترحيل قيدي الصرافة بنجاح.")
+                        st.rerun()
+                    else:
+                        st.error("الرصيد المتاح في الصندوق المصدر غير كافٍ.")
 
-ROLE_NAME_AR = {
-    "Admin": "مدير النظام العام",
-    "Manager": "المدير العام",
-    "Accountant": "محاسب الشركة",
-    "Partner": "شريك ومساهم",
-    "Secretary": "استقبال وإدارة مكتبية",
-    "Employee": "موظف"
-}
+def render_vouchers_and_reports():
+    st.subheader(":material/print: التقارير وتوليد السندات الرسمية")
+    tab_pdf, tab_ex = st.tabs([":material/picture_as_pdf: سند مالي رسمي", ":material/table_view: تصدير إلى Excel"])
 
-if user_role == "Admin":
-    allowed_menus = [
-        "لوحة المؤشرات العامة والأرصدة",
-        factory_menu_title,
-        "هيكل الشركاء ورأس المال والأرباح",
-        "كشوفات حسابات المستثمرين",
-        "التحويل بين الخزائن والصرافة",
-        "طباعة السندات وتصدير التقارير",
-        "مسيرات الرواتب الشهرية",
-        "جدول دوامات وساعات العمل",
-        "سجل المواعيد والزيارات",
-        "إدارة المخزون ومواد المشاريع",
-        "دليل وتعديل بيانات الأطراف",
-        "دفتر الحركات وسجل الفواتير",
-        "إضافة فاتورة وحركة متعددة البنود",
-        "تعديل / إلغاء حركة مالية",
-        "حسابات المشاريع والمستثمرين",
-        "الإدارة والتشغيل والتعاقدات"
-    ]
-elif user_role == "Manager":
-    allowed_menus = [
-        "لوحة المؤشرات العامة والأرصدة",
-        factory_menu_title,
-        "هيكل الشركاء ورأس المال والأرباح",
-        "كشوفات حسابات المستثمرين",
-        "طباعة السندات وتصدير التقارير",
-        "مسيرات الرواتب الشهرية",
-        "جدول دوامات وساعات العمل",
-        "سجل المواعيد والزيارات",
-        "إدارة المخزون ومواد المشاريع",
-        "دليل وتعديل بيانات الأطراف",
-        "دفتر الحركات وسجل الفواتير",
-        "حسابات المشاريع والمستثمرين"
-    ]
-elif user_role == "Accountant":
-    allowed_menus = [
-        "لوحة المؤشرات العامة والأرصدة",
-        factory_menu_title,
-        "كشوفات حسابات المستثمرين",
-        "التحويل بين الخزائن والصرافة",
-        "طباعة السندات وتصدير التقارير",
-        "مسيرات الرواتب الشهرية",
-        "جدول دوامات وساعات العمل",
-        "إدارة المخزون ومواد المشاريع",
-        "دليل وتعديل بيانات الأطراف",
-        "دفتر الحركات وسجل الفواتير",
-        "إضافة فاتورة وحركة متعددة البنود",
-        "تعديل / إلغاء حركة مالية",
-        "حسابات المشاريع والمستثمرين"
-    ]
-elif user_role == "Partner":
-    allowed_menus = [
-        "لوحة المؤشرات العامة والأرصدة",
-        factory_menu_title,
-        "هيكل الشركاء ورأس المال والأرباح",
-        "حسابات المشاريع والمستثمرين",
-        "طباعة السندات وتصدير التقارير"
-    ]
-elif user_role == "Secretary":
-    allowed_menus = [
-        "سجل المواعيد والزيارات",
-        "جدول دوامات وساعات العمل"
-    ]
-else:
-    allowed_menus = [
-        "كشف حسابي ودوامي الذاتي"
-    ]
+    with tab_pdf:
+        tx_options = run_query("""
+            SELECT t.id, t.amount, t.currency, s.name AS s_name 
+            FROM transactions t 
+            LEFT JOIN stakeholders s ON t.stakeholder_id = s.id 
+            ORDER BY t.tx_date DESC, t.id DESC LIMIT 50;
+        """)
+        if not tx_options.empty:
+            tx_labels = [f"{r['id']} | {r['amount']} {r['currency']} | {r['s_name']}" for _, r in tx_options.iterrows()]
+            chosen_label = st.selectbox("اختر السند المالي المطلوب:", tx_labels, index=None, placeholder="اختر السند...")
+            
+            if chosen_label:
+                chosen_id = chosen_label.split(" | ")[0]
+                with get_db_cursor() as (cur, _):
+                    cur.execute("""
+                        SELECT t.id, t.tx_date, t.tx_type, COALESCE(p.name, 'عام'), COALESCE(s.name, 'عام'), 
+                               t.amount, t.currency, t.exchange_rate, t.amount_usd, t.payment_method, t.description 
+                        FROM transactions t 
+                        LEFT JOIN projects p ON t.project_id = p.id 
+                        LEFT JOIN stakeholders s ON t.stakeholder_id = s.id 
+                        WHERE t.id = %s;
+                    """, (chosen_id,))
+                    tx_r = cur.fetchone()
+                    tx_dict = {
+                        'id': tx_r[0], 'tx_date': tx_r[1], 'tx_type': tx_r[2], 
+                        'project_name': tx_r[3], 'stakeholder_name': tx_r[4], 
+                        'amount': float(tx_r[5]), 'currency': tx_r[6], 
+                        'exchange_rate': float(tx_r[7]), 'amount_usd': float(tx_r[8]), 
+                        'payment_method': tx_r[9], 'description': tx_r[10] or ''
+                    }
+                    cur.execute("""
+                        SELECT item_name, category, quantity, unit_price, total_price 
+                        FROM invoice_items 
+                        WHERE transaction_id = %s 
+                        ORDER BY id ASC;
+                    """, (chosen_id,))
+                    items_r = cur.fetchall()
 
-MODULE_CATALOG = [
-    {
-        "category": "لوحة القيادة والمؤشرات",
-        "icon": ":material/dashboard:",
-        "desc": "مراقبة السيولة النقدية، حركة الصناديق، وحسابات معمل الحجر المستقلة.",
-        "items": [
-            {"title": "لوحة المؤشرات العامة والأرصدة", "icon": ":material/analytics:"},
-            {"title": factory_menu_title, "icon": ":material/precision_manufacturing:"},
-        ]
-    },
-    {
-        "category": "المشاريع والشركاء",
-        "icon": ":material/domain:",
-        "desc": "إدارة تكاليف المشاريع، أتعاب الإدارة، كشوفات المستثمرين، وهيكل رأس المال.",
-        "items": [
-            {"title": "حسابات المشاريع والمستثمرين", "icon": ":material/domain_verification:"},
-            {"title": "كشوفات حسابات المستثمرين", "icon": ":material/manage_accounts:"},
-            {"title": "هيكل الشركاء ورأس المال والأرباح", "icon": ":material/handshake:"},
-        ]
-    },
-    {
-        "category": "العمليات المالية والمحاسبة",
-        "icon": ":material/account_balance:",
-        "desc": "تسجيل الفواتير الذري، دفتر القيود العام، الصرافة الداخلية، وإصدار السندات.",
-        "items": [
-            {"title": "إضافة فاتورة وحركة متعددة البنود", "icon": ":material/post_add:"},
-            {"title": "دفتر الحركات وسجل الفواتير", "icon": ":material/receipt_long:"},
-            {"title": "التحويل بين الخزائن والصرافة", "icon": ":material/currency_exchange:"},
-            {"title": "تعديل / إلغاء حركة مالية", "icon": ":material/edit_note:"},
-            {"title": "طباعة السندات وتصدير التقارير", "icon": ":material/print:"},
-        ]
-    },
-    {
-        "category": "الموارد البشرية والمكتب",
-        "icon": ":material/badge:",
-        "desc": "تتبع سجلات الحضور والانصراف، احتساب مسيرات الرواتب، وسجل الزيارات.",
-        "items": [
-            {"title": "جدول دوامات وساعات العمل", "icon": ":material/schedule:"},
-            {"title": "مسيرات الرواتب الشهرية", "icon": ":material/payments:"},
-            {"title": "سجل المواعيد والزيارات", "icon": ":material/calendar_today:"},
-            {"title": "كشف حسابي ودوامي الذاتي", "icon": ":material/account_circle:"},
-        ]
-    },
-    {
-        "category": "المستودع والإدارة العامة",
-        "icon": ":material/settings:",
-        "desc": "جرد وحركات المواد والمخزون، دليل الأطراف والموردين، وضبط المستخدمين.",
-        "items": [
-            {"title": "إدارة المخزون ومواد المشاريع", "icon": ":material/inventory_2:"},
-            {"title": "دليل وتعديل بيانات الأطراف", "icon": ":material/group:"},
-            {"title": "الإدارة والتشغيل والتعاقدات", "icon": ":material/admin_panel_settings:"},
-        ]
-    },
-]
+                pdf_bytes = generate_receipt_pdf(tx_dict, items_r)
+                st.download_button("تحميل وثيقة السند (PDF)", data=pdf_bytes, file_name=f"Voucher_{chosen_id}.pdf", mime="application/pdf", icon=":material/download:")
 
-# تصفية القطاعات وفق الصلاحيات الفعلية
-user_categories = []
-for cat in MODULE_CATALOG:
-    valid_items = [it for it in cat["items"] if it["title"] in allowed_menus]
-    if valid_items:
-        user_categories.append({
-            "category": cat["category"],
-            "icon": cat["icon"],
-            "desc": cat["desc"],
-            "items": valid_items
-        })
+    with tab_ex:
+        df_all_tx = run_query("""
+            SELECT t.id AS "رقم الفاتورة", t.tx_date AS "التاريخ", t.tx_type AS "نوع الحركة", 
+                   p.name AS "المشروع", s.name AS "الطرف", t.amount AS "المبلغ", t.currency AS "العملة", 
+                   t.amount_usd AS "المعادل بالدولار ($)", t.direction AS "الاتجاه", 
+                   t.payment_method AS "طريقة الدفع", t.fx_gain_loss AS "فروقات الصرف", t.description AS "البيان"
+            FROM transactions t 
+            LEFT JOIN projects p ON t.project_id = p.id 
+            LEFT JOIN stakeholders s ON t.stakeholder_id = s.id 
+            ORDER BY t.tx_date DESC;
+        """)
+        st.download_button("تصدير السجل المالي العام (Excel)", data=to_excel_download_link(df_all_tx, "Transactions_Report.xlsx"), file_name="MA_Transactions.xlsx", icon=":material/table_view:")
 
-if "current_page" not in st.session_state:
-    st.session_state.current_page = "HOME"
+def render_transactions_ledger():
+    st.subheader(":material/receipt_long: دفتر الحركات وسجل الفواتير التفصيلي")
+    df_unified = run_query("""
+        SELECT t.id AS "رقم الفاتورة", COALESCE(ii.id::text, '-') AS "رقم البند",
+               t.tx_date AS "التاريخ", t.tx_type AS "نوع الحركة", p.name AS "المشروع",
+               COALESCE(s_item.name, s_tx.name, 'غير محدد') AS "المستفيد / المورد",
+               COALESCE(ii.item_name, t.description, '-') AS "البند / البيان",
+               COALESCE(ii.category, '-') AS "التصنيف",
+               COALESCE(ii.quantity::text, '-') AS "الكمية",
+               COALESCE(ii.unit_price::text, '-') AS "السعر الإفرادي",
+               COALESCE(ii.total_price, t.amount) AS "المبلغ",
+               COALESCE(ii.currency, t.currency) AS "العملة",
+               CASE WHEN ii.affects_inventory THEN 'نعم' ELSE 'لا' END AS "خصم مخزني",
+               t.amount_usd AS "إجمالي الفاتورة ($)",
+               t.payment_method AS "طريقة الدفع"
+        FROM transactions t
+        LEFT JOIN projects p ON t.project_id = p.id
+        LEFT JOIN stakeholders s_tx ON t.stakeholder_id = s_tx.id
+        LEFT JOIN invoice_items ii ON t.id = ii.transaction_id
+        LEFT JOIN stakeholders s_item ON ii.stakeholder_id = s_item.id
+        WHERE p.project_type != 'Factory' OR p.project_type IS NULL
+        ORDER BY t.tx_date DESC, t.id DESC, ii.id ASC;
+    """)
+    st.dataframe(df_unified.fillna("-"), use_container_width=True, hide_index=True)
+    st.download_button("تصدير السجل التفصيلي (Excel)", data=to_excel_download_link(df_unified, "Detailed_Ledger.xlsx"), file_name="Detailed_Ledger.xlsx", icon=":material/table_view:")
 
-# ----------------------------------------------------
-# 5. شريط المسار العلوي الموحد (مع اللوغو المباشر)
-# ----------------------------------------------------
-col_b1, col_b2, col_b3 = st.columns([1.3, 2.7, 1])
+def render_add_invoice(current_user):
+    if current_user['role'] in ["Admin", "Accountant"]:
+        st.subheader(":material/post_add: قيد فاتورة / حركة مالية")
+        projs = run_query("SELECT id, name FROM projects WHERE project_type != 'Factory' ORDER BY name;")
+        parties = run_query("SELECT id, name FROM stakeholders ORDER BY name;")
+        
+        df_available_stock = run_query("SELECT item_name, quantity_on_hand, avg_unit_cost FROM inventory_stock ORDER BY item_name;")
+        stock_item_names = df_available_stock['item_name'].tolist() if not df_available_stock.empty else []
+        
+        auto_inv = get_next_invoice_id()
+        mode = st.radio("نمط القيد المالي:", ["سند مالي مباشر (بدون بنود تفصيلية)", "فاتورة تفصيلية متعددة البنود"])
 
-with col_b1:
-    if st.session_state.current_page != "HOME":
-        if st.button("العودة للرئيسية", icon=":material/arrow_forward:", use_container_width=True):
-            st.session_state.current_page = "HOME"
-            st.rerun()
-    else:
-        # حقن اللوغو بجانب اسم الشركة
-        img_element = f'<img src="{logo_base64}" class="brand-header-logo">' if logo_base64 else '🏛️'
-        st.markdown(f"""
-            <div class="brand-header-badge">
-                {img_element}
-                <span>شركة MA العقارية</span>
-            </div>
-        """, unsafe_allow_html=True)
+        if "بدون بنود" in mode:
+            with st.form("simple_tx_form", clear_on_submit=True):
+                ca1, ca2, ca3 = st.columns(3)
+                with ca1:
+                    # مقفل برمجياً بشكل قطعي وغير قابل للتعديل
+                    st.text_input("رقم السند", value=auto_inv, disabled=True)
+                    t_date = st.date_input("التاريخ", datetime.now().date())
+                    t_type = st.selectbox(
+                        "نوع الحركة", 
+                        ["دفعة لمشروع", "مقبوضات من مستثمر", "مصروف عام", "راتب او سلفة", "توزيع أرباح شريك", "ايراد عام"],
+                        index=None,
+                        placeholder="اختر نوع الحركة..."
+                    )
+                with ca2:
+                    p_name = st.selectbox("المشروع", projs['name'].tolist(), index=None, placeholder="اختر المشروع...")
+                    part_name = st.selectbox("الطرف", parties['name'].tolist(), index=None, placeholder="اختر الطرف...")
+                    method = st.selectbox("طريقة الدفع", ["كاش (نقداً)", "حوالة مصرفية", "شيك بنكي"], index=None, placeholder="اختر طريقة الدفع...")
+                with ca3:
+                    curr_choice = st.selectbox("العملة", ["USD", "SYP"], index=None, placeholder="اختر العملة...")
+                    rate_val = st.number_input("سعر الصرف", min_value=1.0, value=None, placeholder="أدخل سعر الصرف...", step=0.5)
+                    amount_val = st.number_input("المبلغ الإجمالي", min_value=0.0, value=None, placeholder="0.00", step=50.0)
 
-with col_b2:
-    if st.session_state.current_page == "HOME":
-        st.markdown("""
-            <div style="background: #FFFFFF; padding: 6px 14px; border-radius: 6px; border: 1px solid #D0D7DE; font-size: 0.85rem; color: #57606A; line-height: 24px;">
-                <b>الرئيسية</b> &nbsp;›&nbsp; <span>بوابة القطاعات والخدمات المركزية</span>
-            </div>
-        """, unsafe_allow_html=True)
-    else:
-        cat_title = "القطاع المالي"
-        for c in user_categories:
-            if any(it["title"] == st.session_state.current_page for it in c["items"]):
-                cat_title = c["category"]
-                break
-        st.markdown(f"""
-            <div style="background: #FFFFFF; padding: 6px 14px; border-radius: 6px; border: 1px solid #D0D7DE; font-size: 0.85rem; color: #57606A; line-height: 24px;">
-                <span>الرئيسية</span> &nbsp;›&nbsp; 
-                <span>{cat_title}</span> &nbsp;›&nbsp; 
-                <b style="color: #0F4733;">{st.session_state.current_page}</b>
-            </div>
-        """, unsafe_allow_html=True)
-
-with col_b3:
-    col_u_name, col_u_out = st.columns([2, 1])
-    with col_u_name:
-        st.markdown(f"""
-            <div style="background: #F6F8FA; padding: 6px; border-radius: 6px; border: 1px solid #D0D7DE; font-size: 0.75rem; text-align: center; color: #1F2328; font-weight: bold;">
-                {current_user['full_name']}
-            </div>
-        """, unsafe_allow_html=True)
-    with col_u_out:
-        if st.button("", icon=":material/logout:", help="تسجيل الخروج", use_container_width=True):
-            st.session_state.authenticated = False
-            st.session_state.user_info = None
-            st.session_state.current_page = "HOME"
-            st.rerun()
-
-st.markdown("<hr style='border: 0.5px solid #D0D7DE; margin-top: 10px; margin-bottom: 20px;'>", unsafe_allow_html=True)
-
-# ----------------------------------------------------
-# 6. شاشة البوابة المركزية الديناميكية (Fluid Auto-Fit Grid)
-# ----------------------------------------------------
-if st.session_state.current_page == "HOME":
-    st.markdown("### :material/grid_view: بوابة العمليات والقطاعات التنفيذية")
-    st.caption("حدد القطاع أو الشاشة المطلوبة للبدء المباشر:")
-
-    grid_cols = st.columns(len(user_categories))
-
-    for idx, cat in enumerate(user_categories):
-        with grid_cols[idx]:
-            st.markdown('<div class="portal-card-anchor" style="display:none;"></div>', unsafe_allow_html=True)
-            with st.container(border=True):
-                st.markdown(f"#### {cat['icon']} {cat['category']}")
-                st.caption(cat["desc"])
-                st.markdown("<hr style='margin: 8px 0; border: 0.5px solid #E1E4E8;'>", unsafe_allow_html=True)
-                for it in cat["items"]:
-                    if st.button(it["title"], icon=it["icon"], use_container_width=True, key=f"portal_btn_{it['title']}"):
-                        st.session_state.current_page = it["title"]
+                desc_val = st.text_area("البيان والملاحظات", placeholder="أدخل البيان والتفاصيل...")
+                
+                if st.form_submit_button("حفظ وترحيل السند المالي", icon=":material/save:"):
+                    a_val = float(amount_val or 0.0)
+                    r_val = float(rate_val or 1.0)
+                    if not p_name or not part_name or not t_type or not curr_choice or not method or a_val <= 0 or rate_val is None:
+                        st.error("يرجى تعبئة كافة الحقول وتحديد المشروع والطرف والعملة وسعر الصرف والمبلغ.")
+                    else:
+                        p_id = int(projs.loc[projs['name'] == p_name, 'id'].values[0])
+                        s_id = int(parties.loc[parties['name'] == part_name, 'id'].values[0])
+                        v_id = 1 if curr_choice == 'USD' else 2
+                        dir_m = 'IN' if any(k in t_type for k in ['مقبوضات', 'ايراد']) else 'OUT'
+                        amt_u = float(a_val if curr_choice == 'USD' else (a_val / r_val))
+                        with get_db_cursor(commit=True) as (cur, _):
+                            cur.execute("""
+                                INSERT INTO transactions (id, tx_date, tx_type, project_id, stakeholder_id, vault_id, amount, currency, exchange_rate, amount_usd, direction, payment_method, description)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+                            """, (str(auto_inv), t_date, str(t_type), p_id, s_id, v_id, a_val, curr_choice, r_val, amt_u, dir_m, method, desc_val or ""))
+                        st.success(f"تم ترحيل السند {auto_inv} بنجاح.")
                         st.rerun()
 
-# ----------------------------------------------------
-# 7. توجيه الشاشات التابعة
-# ----------------------------------------------------
-else:
-    target = st.session_state.current_page
+        else:
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                # مقفل برمجياً بشكل قطعي وغير قابل للتعديل
+                st.text_input("رقم الفاتورة", value=auto_inv, disabled=True)
+                t_date_m = st.date_input("التاريخ", datetime.now().date())
+            with c2:
+                p_name_m = st.selectbox("المشروع", projs['name'].tolist(), index=None, placeholder="اختر المشروع...", key="multi_inv_proj")
+                t_type_m = st.selectbox("نوع الحركة", ["دفعة لمشروع", "شراء مواد وتخزين", "مصروف عام", "ايراد عام"], index=None, placeholder="اختر نوع الحركة...", key="multi_inv_type")
+            with c3:
+                curr_m = st.selectbox("العملة", ["USD", "SYP"], index=None, placeholder="اختر العملة...", key="multi_inv_curr")
+                rate_m = st.number_input("سعر الصرف", min_value=1.0, value=None, placeholder="أدخل سعر الصرف...", step=0.5, key="multi_inv_rate")
+                method_m = st.selectbox("طريقة الدفع", ["كاش (نقداً)", "حوالة مصرفية", "شيك بنكي"], index=None, placeholder="اختر طريقة الدفع...", key="multi_inv_method")
 
-    if target == "لوحة المؤشرات العامة والأرصدة":
-        render_dashboard()
-    elif target == factory_menu_title:
-        render_stone_factory()
-    elif target == "هيكل الشركاء ورأس المال والأرباح":
-        render_partners(current_user)
-    elif target == "كشوفات حسابات المستثمرين":
-        render_investor_statements()
-    elif target == "التحويل بين الخزائن والصرافة":
-        render_vault_transfers(current_user)
-    elif target == "طباعة السندات وتصدير التقارير":
-        render_vouchers_and_reports()
-    elif target == "مسيرات الرواتب الشهرية":
-        render_payroll(current_user)
-    elif target == "جدول دوامات وساعات العمل":
-        render_attendance(current_user)
-    elif target == "سجل المواعيد والزيارات":
-        render_appointments(current_user)
-    elif target == "إدارة المخزون ومواد المشاريع":
-        render_inventory(current_user)
-    elif target == "دليل وتعديل بيانات الأطراف":
-        render_stakeholders(current_user)
-    elif target == "دفتر الحركات وسجل الفواتير":
-        render_transactions_ledger()
-    elif target == "إضافة فاتورة وحركة متعددة البنود":
-        render_add_invoice(current_user)
-    elif target == "تعديل / إلغاء حركة مالية":
-        render_edit_transactions(current_user)
-    elif target == "حسابات المشاريع والمستثمرين":
-        render_projects_overview()
-    elif target == "الإدارة والتشغيل والتعاقدات":
-        render_admin()
-    elif target == "كشف حسابي ودوامي الذاتي":
-        render_employee_portal(current_user)
+            desc_m = st.text_input("البيان العام", placeholder="أدخل البيان العام للفاتورة...", key="multi_inv_desc")
+            cats = ["مواد بناء وتأسيس", "إكساء وتشطيب", "أجور معلمين", "أدوات ومعدات", "نقل وشحن", "أخرى"]
+            p_list = parties['name'].tolist()
+
+            default_df = pd.DataFrame([{
+                "اسم البند": "", 
+                "التصنيف": None, 
+                "الكمية": None, 
+                "السعر الإفرادي": None, 
+                "الطرف المستفيد": None, 
+                "خصم من المخزون تلقائياً": False
+            }])
+            
+            edited_df = st.data_editor(
+                default_df, 
+                num_rows="dynamic", 
+                use_container_width=True,
+                column_config={
+                    "اسم البند": st.column_config.TextColumn("اسم البند / المادة (يطابق المخزون)", required=True),
+                    "التصنيف": st.column_config.SelectboxColumn("التصنيف", options=cats, required=True),
+                    "الكمية": st.column_config.NumberColumn("الكمية", min_value=0.01, default=None),
+                    "السعر الإفرادي": st.column_config.NumberColumn("السعر الإفرادي", min_value=0.0, default=None),
+                    "الطرف المستفيد": st.column_config.SelectboxColumn("الطرف المستفيد", options=p_list, required=True),
+                    "خصم من المخزون تلقائياً": st.column_config.CheckboxColumn("خصم مخزني", default=False)
+                }
+            )
+
+            valid_items = edited_df[
+                (edited_df["اسم البند"].astype(str).str.strip() != "") & 
+                (edited_df["الطرف المستفيد"].notna()) &
+                (edited_df["التصنيف"].notna()) &
+                (edited_df["الكمية"].notna()) &
+                (edited_df["السعر الإفرادي"].notna())
+            ].copy()
+
+            if not valid_items.empty:
+                valid_items["المجموع"] = valid_items["الكمية"].astype(float) * valid_items["السعر الإفرادي"].astype(float)
+                total_computed = float(valid_items["المجموع"].sum())
+                curr_symbol = curr_m if curr_m else ""
+                st.markdown(f"### الإجمالي المحتسب: **{total_computed:,.2f} {curr_symbol}**")
+
+                if st.button("حفظ الفاتورة ومعالجة قيود المخزون", icon=":material/save:"):
+                    r_val_m = float(rate_m or 1.0)
+                    if not p_name_m or not t_type_m or not curr_m or not method_m or rate_m is None or total_computed <= 0:
+                        st.error("يرجى تحديد المشروع، نوع الحركة، العملة، سعر الصرف، طريقة الدفع، والتأكد من البنود.")
+                    else:
+                        p_id = int(projs.loc[projs['name'] == p_name_m, 'id'].values[0])
+                        v_id = 1 if curr_m == 'USD' else 2
+                        dir_m = 'IN' if any(k in t_type_m for k in ['مقبوضات', 'ايراد']) else 'OUT'
+                        amt_u = float(total_computed if curr_m == 'USD' else (total_computed / r_val_m))
+                        first_party = valid_items.iloc[0]["الطرف المستفيد"]
+                        primary_s_id = int(parties.loc[parties['name'] == first_party, 'id'].values[0])
+
+                        try:
+                            with get_db_cursor(commit=True) as (cur, _):
+                                cur.execute("""
+                                    INSERT INTO transactions (id, tx_date, tx_type, project_id, stakeholder_id, vault_id, amount, currency, exchange_rate, amount_usd, direction, payment_method, description)
+                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+                                """, (str(auto_inv), t_date_m, str(t_type_m), p_id, primary_s_id, v_id, total_computed, curr_m, r_val_m, amt_u, dir_m, method_m, desc_m or ""))
+                                
+                                for _, r in valid_items.iterrows():
+                                    i_name = str(r["اسم البند"]).strip()
+                                    i_qty = float(r["الكمية"])
+                                    i_price = float(r["السعر الإفرادي"])
+                                    i_tot = float(r["المجموع"])
+                                    i_party = r["الطرف المستفيد"]
+                                    i_stk_id = int(parties.loc[parties['name'] == i_party, 'id'].values[0])
+                                    affects_inv = bool(r.get("خصم من المخزون تلقائياً", False))
+
+                                    if affects_inv:
+                                        cur.execute("""
+                                            SELECT quantity_on_hand, avg_unit_cost 
+                                            FROM inventory_stock 
+                                            WHERE item_name = %s 
+                                            FOR UPDATE;
+                                        """, (i_name,))
+                                        stock_record = cur.fetchone()
+
+                                        if not stock_record:
+                                            raise ValueError(f"المادة '{i_name}' غير مسجلة في المخزون.")
+                                        
+                                        available_qty = float(stock_record[0])
+                                        unit_cost_val = float(stock_record[1])
+
+                                        if available_qty < i_qty:
+                                            raise ValueError(f"عجز مخزني في المادة '{i_name}'. المتاح: {available_qty}، المطلوب: {i_qty}")
+
+                                        cur.execute("""
+                                            UPDATE inventory_stock 
+                                            SET quantity_on_hand = quantity_on_hand - %s 
+                                            WHERE item_name = %s;
+                                        """, (i_qty, i_name))
+
+                                        cur.execute("""
+                                            INSERT INTO inventory_issues (transaction_id, item_name, project_id, quantity, unit_cost)
+                                            VALUES (%s, %s, %s, %s, %s);
+                                        """, (str(auto_inv), i_name, p_id, i_qty, unit_cost_val))
+
+                                    cur.execute("""
+                                        INSERT INTO invoice_items (transaction_id, item_name, category, quantity, unit_price, total_price, stakeholder_id, currency, affects_inventory)
+                                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);
+                                    """, (str(auto_inv), i_name, str(r["التصنيف"]), i_qty, i_price, i_tot, i_stk_id, curr_m, affects_inv))
+
+                            st.success(f"تم ترحيل الفاتورة {auto_inv} وتحديث الأرصدة بنجاح.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"تم التراجع عن القيد (Rollback): {e}")
+
+def render_edit_transactions(current_user):
+    if current_user['role'] in ["Admin", "Accountant"]:
+        st.subheader(":material/edit_note: استعراض وإلغاء القيود المالية")
+        all_tx = run_query("SELECT id, tx_date, amount, currency, description FROM transactions ORDER BY tx_date DESC LIMIT 50;")
+        if not all_tx.empty:
+            sel_str = st.selectbox(
+                "اختر السند / الفاتورة المراد إلغاؤها:", 
+                [f"{r['id']} | {r['tx_date']} | {r['amount']} {r['currency']} | {r['description']}" for _, r in all_tx.iterrows()],
+                index=None,
+                placeholder="اختر السند..."
+            )
+            if sel_str:
+                sel_id = sel_str.split(" | ")[0]
+                if st.button(f"حذف الفاتورة {sel_id} واسترجاع المخزون", icon=":material/delete:"):
+                    try:
+                        with get_db_cursor(commit=True) as (cur, _):
+                            cur.execute("""
+                                SELECT item_name, quantity 
+                                FROM inventory_issues 
+                                WHERE transaction_id = %s;
+                            """, (sel_id,))
+                            issued_records = cur.fetchall()
+
+                            for it_name, it_q in issued_records:
+                                cur.execute("""
+                                    UPDATE inventory_stock 
+                                    SET quantity_on_hand = quantity_on_hand + %s 
+                                    WHERE item_name = %s;
+                                """, (float(it_q), it_name))
+
+                            cur.execute("DELETE FROM inventory_issues WHERE transaction_id = %s;", (sel_id,))
+                            cur.execute("DELETE FROM invoice_items WHERE transaction_id = %s;", (sel_id,))
+                            cur.execute("DELETE FROM transactions WHERE id = %s;", (sel_id,))
+                        
+                        st.success(f"تم حذف الفاتورة {sel_id} واستعادة قيود المخزون.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"خطأ أثناء الحذف: {e}")
+
+def render_investor_statements():
+    st.subheader(":material/manage_accounts: كشوفات حسابات المستثمرين")
+    all_projs = run_query("SELECT id, name, management_fee_rate FROM projects WHERE project_type NOT IN ('Internal', 'Factory') ORDER BY name;")
+    if not all_projs.empty:
+        selected_proj = st.selectbox("المشروع المستهدف", all_projs['name'].tolist(), index=None, placeholder="اختر المشروع لعرض كشفه...")
+        if selected_proj:
+            p_row = all_projs[all_projs['name'] == selected_proj].iloc[0]
+            p_id = int(p_row['id'])
+            f_rate = float(p_row['management_fee_rate'])
+
+            with get_db_cursor() as (cur, _):
+                cur.execute("SELECT COALESCE(SUM(amount_usd), 0) FROM transactions WHERE project_id = %s AND direction = 'IN';", (p_id,))
+                paid_in = float(cur.fetchone()[0] or 0.0)
+                cur.execute("SELECT COALESCE(SUM(amount_usd), 0) FROM transactions WHERE project_id = %s AND direction = 'OUT';", (p_id,))
+                costs_out = float(cur.fetchone()[0] or 0.0)
+
+            mgmt_fee = costs_out * f_rate
+            net_balance = (costs_out + mgmt_fee) - paid_in
+
+            c1, c2, c3, c4 = st.columns(4)
+            with c1: st.metric("المقبوض من المستثمر", f"{paid_in:,.2f} $")
+            with c2: st.metric("تكاليف التنفيذ", f"{costs_out:,.2f} $")
+            with c3: st.metric(f"أتعاب الإدارة ({f_rate*100:.0f}%)", f"{mgmt_fee:,.2f} $")
+            with c4: st.metric("الصافي المستحق", f"{net_balance:,.2f} $")
+
+            df_inv_tx = run_query("""
+                SELECT id AS "رقم الفاتورة", tx_date AS "التاريخ", tx_type AS "نوع الحركة",
+                       amount AS "المبلغ", currency AS "العملة", amount_usd AS "المعادل بالدولار ($)", description AS "البيان"
+                FROM transactions WHERE project_id = %s ORDER BY tx_date DESC;
+            """, (p_id,))
+            st.dataframe(df_inv_tx.fillna("-"), use_container_width=True, hide_index=True)
+
+def render_projects_overview():
+    st.subheader(":material/domain: كشف أتعاب الإدارة وتكاليف المشاريع")
+    st.dataframe(run_query("""
+        SELECT p.name AS "المشروع",
+               CASE WHEN p.status = 'Active' THEN 'نشط' ELSE 'مكتمل' END AS "الحالة",
+               p.management_fee_rate * 100 AS "أتعاب الإدارة %",
+               COALESCE(SUM(CASE WHEN t.direction = 'OUT' THEN t.amount_usd ELSE 0 END), 0) AS "المصاريف ($)",
+               ROUND(COALESCE(SUM(CASE WHEN t.direction = 'OUT' THEN t.amount_usd ELSE 0 END), 0) * p.management_fee_rate, 2) AS "أتعاب الإدارة المستحقة ($)",
+               COALESCE(SUM(CASE WHEN t.direction = 'IN' THEN t.amount_usd ELSE 0 END), 0) AS "المقبوض من المستثمر ($)"
+        FROM projects p 
+        LEFT JOIN transactions t ON p.id = t.project_id 
+        WHERE p.project_type NOT IN ('Internal', 'Factory') 
+        GROUP BY p.id, p.name, p.status, p.management_fee_rate;
+    """).fillna("-"), use_container_width=True, hide_index=True)
