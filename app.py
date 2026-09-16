@@ -1,5 +1,6 @@
 import streamlit as st
 import os
+import base64
 
 from core.auth import authenticate_user
 from modules.dashboard import render_dashboard
@@ -27,13 +28,20 @@ from modules.operations import (
 from modules.admin import render_admin
 
 # ----------------------------------------------------
-# 1. إعدادات الصفحة
+# 1. إعدادات الصفحة وتحميل اللوغو كـ Base64
 # ----------------------------------------------------
-logo_filename = "MA Logo.png" if os.path.exists("MA Logo.png") else None
+def get_image_base64(image_path: str):
+    if os.path.exists(image_path):
+        with open(image_path, "rb") as img_file:
+            return f"data:image/png;base64,{base64.b64encode(img_file.read()).decode()}"
+    return None
+
+logo_filename = "MA Logo.png"
+logo_base64 = get_image_base64(logo_filename)
 
 st.set_page_config(
     page_title="شركة MA العقارية | منظومة الإدارة والرقابة المالية",
-    page_icon=logo_filename if logo_filename else "🏛️",
+    page_icon=logo_filename if os.path.exists(logo_filename) else "🏛️",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -87,6 +95,27 @@ st.markdown("""
 
     .stApp { 
         background-color: #F9F9F8 !important; 
+    }
+
+    /* شارة الهوية المؤسسية الموحدة مع الشعار */
+    .brand-header-badge {
+        background-color: #0F4733;
+        color: #FFFFFF;
+        padding: 6px 14px;
+        border-radius: 6px;
+        border: 1px solid #BE9D5F;
+        font-weight: 700;
+        font-size: 0.92rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        box-shadow: 0 1px 3px rgba(15, 71, 51, 0.15);
+    }
+    .brand-header-logo {
+        height: 24px;
+        width: auto;
+        object-fit: contain;
     }
 
     /* تحويل صف البطاقات إلى Responsive Flex Grid ديناميكي حر */
@@ -189,8 +218,10 @@ if not st.session_state.authenticated:
     st.markdown("<br><br>", unsafe_allow_html=True)
     _, c_log, _ = st.columns([1, 1.5, 1])
     with c_log:
-        st.markdown("""
+        logo_html = f'<img src="{logo_base64}" style="height: 60px; margin-bottom: 8px;">' if logo_base64 else ''
+        st.markdown(f"""
             <div style="text-align: center; margin-bottom: 25px;">
+                {logo_html}
                 <h2 style="color: #0F4733; margin: 0; font-weight: 800;">منظومة الإدارة والرقابة المالية</h2>
                 <div style="color: #BE9D5F; font-weight: 700; margin-top: 4px;">شركة MA للتطوير العقاري والمقاولات</div>
             </div>
@@ -371,9 +402,9 @@ if "current_page" not in st.session_state:
     st.session_state.current_page = "HOME"
 
 # ----------------------------------------------------
-# 5. شريط المسار العلوي الموحد
+# 5. شريط المسار العلوي الموحد (مع اللوغو المباشر)
 # ----------------------------------------------------
-col_b1, col_b2, col_b3 = st.columns([1.2, 2.8, 1])
+col_b1, col_b2, col_b3 = st.columns([1.3, 2.7, 1])
 
 with col_b1:
     if st.session_state.current_page != "HOME":
@@ -381,9 +412,12 @@ with col_b1:
             st.session_state.current_page = "HOME"
             st.rerun()
     else:
-        st.markdown("""
-            <div style="background: #0F4733; color: white; padding: 6px 12px; border-radius: 6px; font-weight: bold; text-align: center; font-size: 0.9rem;">
-                🏛️ شركة MA العقارية
+        # حقن اللوغو بجانب اسم الشركة
+        img_element = f'<img src="{logo_base64}" class="brand-header-logo">' if logo_base64 else '🏛️'
+        st.markdown(f"""
+            <div class="brand-header-badge">
+                {img_element}
+                <span>شركة MA العقارية</span>
             </div>
         """, unsafe_allow_html=True)
 
@@ -426,18 +460,16 @@ with col_b3:
 st.markdown("<hr style='border: 0.5px solid #D0D7DE; margin-top: 10px; margin-bottom: 20px;'>", unsafe_allow_html=True)
 
 # ----------------------------------------------------
-# 6. شاشة البوابة المركزية الديناميكية بالكامل (Fluid Auto-Fit Grid)
+# 6. شاشة البوابة المركزية الديناميكية (Fluid Auto-Fit Grid)
 # ----------------------------------------------------
 if st.session_state.current_page == "HOME":
     st.markdown("### :material/grid_view: بوابة العمليات والقطاعات التنفيذية")
     st.caption("حدد القطاع أو الشاشة المطلوبة للبدء المباشر:")
 
-    # توليد صف أعمدة ديناميكي يتحول بـ CSS إلى Flex-wrap حر
     grid_cols = st.columns(len(user_categories))
 
     for idx, cat in enumerate(user_categories):
         with grid_cols[idx]:
-            # Anchor tag لاستهداف حاوية Flexbox برمجياً
             st.markdown('<div class="portal-card-anchor" style="display:none;"></div>', unsafe_allow_html=True)
             with st.container(border=True):
                 st.markdown(f"#### {cat['icon']} {cat['category']}")
