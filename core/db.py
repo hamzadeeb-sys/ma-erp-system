@@ -15,7 +15,7 @@ psycopg2.extensions.register_adapter(np.int32, lambda val: psycopg2.extensions.A
 @st.cache_resource
 def get_db_pool():
     if "postgres" not in st.secrets:
-        st.error("⚠️ لم يتم العثور على إعدادات [postgres] في Secrets السيرفر.")
+        st.error(" لم يتم العثور على إعدادات [postgres] في Secrets السيرفر.")
         st.stop()
     cfg = st.secrets["postgres"]
     try:
@@ -31,7 +31,7 @@ def get_db_pool():
             connect_timeout=10
         )
     except Exception as e:
-        st.error(f"❌ خطأ اتصال مباشر بقاعدة البيانات: {e}")
+        st.error(f" خطأ اتصال مباشر بقاعدة البيانات: {e}")
         st.stop()
 
 @contextmanager
