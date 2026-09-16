@@ -43,7 +43,24 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+st.markdown("""
+    <link rel="manifest" href="/app/static/manifest.json">
+    <meta name="theme-color" content="#0F4733">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="MA ERP">
+    <link rel="apple-touch-icon" href="/app/static/icon-192.png">
 
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/app/static/sw.js')
+            .then(reg => console.log('PWA Service Worker Active:', reg.scope))
+            .catch(err => console.error('PWA Registration Failed:', err));
+        });
+      }
+    </script>
+""", unsafe_allow_html=True)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
