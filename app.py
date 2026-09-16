@@ -7,6 +7,7 @@ from modules.dashboard import render_dashboard
 from modules.stone_factory import render_stone_factory
 from modules.partners import render_partners
 from modules.finance import (
+    render_pnl_statement,
     render_vault_transfers,
     render_vouchers_and_reports,
     render_transactions_ledger,
@@ -27,9 +28,6 @@ from modules.operations import (
 )
 from modules.admin import render_admin
 
-# ----------------------------------------------------
-# 1. إعدادات الصفحة وتحميل اللوغو كـ Base64
-# ----------------------------------------------------
 def get_image_base64(image_path: str):
     if os.path.exists(image_path):
         with open(image_path, "rb") as img_file:
@@ -46,9 +44,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ----------------------------------------------------
-# 2. الهوية البصرية وشبكة الـ Responsive Fluid Grid
-# ----------------------------------------------------
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
@@ -58,20 +53,17 @@ st.markdown("""
         font-family: 'Cairo', sans-serif !important; 
     }
     
-    /* ضبط اتجاه الواجهة العام RTL */
     .block-container, p, label, .stMarkdown, .stText, h1, h2, h3, h4, h5, h6 {
         direction: rtl !important;
         text-align: right !important;
     }
     
-    /* ضبط محاذاة الأيقونات المتجهة */
     span[data-testid="stIconMaterial"] {
         font-family: 'Material Symbols Outlined' !important;
         vertical-align: middle !important;
         font-size: 1.15rem !important;
     }
 
-    /* عزل محرك Glide Data Grid لمنع تشوه الأعمدة */
     [data-testid="stDataFrame"], 
     [data-testid="stDataEditor"],
     [data-testid="stDataFrame"] *, 
@@ -80,7 +72,6 @@ st.markdown("""
         text-align: left !important;
     }
 
-    /* إخفاء السايدبار والهيدر الأصلي */
     [data-testid="stSidebar"], 
     [data-testid="collapsedControl"], 
     header[data-testid="stHeader"],
@@ -97,7 +88,6 @@ st.markdown("""
         background-color: #F9F9F8 !important; 
     }
 
-    /* شارة الهوية المؤسسية الموحدة مع الشعار */
     .brand-header-badge {
         background-color: #0F4733;
         color: #FFFFFF;
@@ -118,7 +108,6 @@ st.markdown("""
         object-fit: contain;
     }
 
-    /* تحويل صف البطاقات إلى Responsive Flex Grid ديناميكي حر */
     div[data-testid="stHorizontalBlock"]:has(.portal-card-anchor) {
         display: flex !important;
         flex-wrap: wrap !important;
@@ -134,7 +123,6 @@ st.markdown("""
         width: auto !important;
     }
 
-    /* توحيد ارتفاع وتنسيق بطاقات القطاعات */
     div[data-testid="stHorizontalBlock"]:has(.portal-card-anchor) [data-testid="stVerticalBlockBorderWrapper"] {
         background-color: #FFFFFF !important;
         border: 1px solid #D0D7DE !important;
@@ -148,7 +136,6 @@ st.markdown("""
         justify-content: space-between !important;
     }
 
-    /* بطاقات المؤشرات الرقمية */
     .metric-card { 
         background: #FFFFFF; 
         border-radius: 6px; 
@@ -207,9 +194,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ----------------------------------------------------
-# 3. إدارة الجلسة والمصادقة
-# ----------------------------------------------------
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
     st.session_state.user_info = None
@@ -247,9 +231,6 @@ if not st.session_state.authenticated:
                     st.warning("يرجى إدخال بيانات تسجيل الدخول.")
     st.stop()
 
-# ----------------------------------------------------
-# 4. كتالوج المنظومة والأدوار
-# ----------------------------------------------------
 current_user = st.session_state.user_info
 user_role = current_user['role']
 factory_menu_title = "حسابات وخزنة معمل الحجر"
@@ -267,6 +248,7 @@ if user_role == "Admin":
     allowed_menus = [
         "لوحة المؤشرات العامة والأرصدة",
         factory_menu_title,
+        "تقرير الأرباح والخسائر الشامل (P&L)",
         "هيكل الشركاء ورأس المال والأرباح",
         "كشوفات حسابات المستثمرين",
         "التحويل بين الخزائن والصرافة",
@@ -286,6 +268,7 @@ elif user_role == "Manager":
     allowed_menus = [
         "لوحة المؤشرات العامة والأرصدة",
         factory_menu_title,
+        "تقرير الأرباح والخسائر الشامل (P&L)",
         "هيكل الشركاء ورأس المال والأرباح",
         "كشوفات حسابات المستثمرين",
         "طباعة السندات وتصدير التقارير",
@@ -301,6 +284,7 @@ elif user_role == "Accountant":
     allowed_menus = [
         "لوحة المؤشرات العامة والأرصدة",
         factory_menu_title,
+        "تقرير الأرباح والخسائر الشامل (P&L)",
         "كشوفات حسابات المستثمرين",
         "التحويل بين الخزائن والصرافة",
         "طباعة السندات وتصدير التقارير",
@@ -317,6 +301,7 @@ elif user_role == "Partner":
     allowed_menus = [
         "لوحة المؤشرات العامة والأرصدة",
         factory_menu_title,
+        "تقرير الأرباح والخسائر الشامل (P&L)",
         "هيكل الشركاء ورأس المال والأرباح",
         "حسابات المشاريع والمستثمرين",
         "طباعة السندات وتصدير التقارير"
@@ -342,6 +327,19 @@ MODULE_CATALOG = [
         ]
     },
     {
+        "category": "العمليات المالية والمحاسبة",
+        "icon": ":material/account_balance:",
+        "desc": "قائمة الأرباح والخسائر، الفواتير، دفتر القيود، الصرافة، وإصدار السندات.",
+        "items": [
+            {"title": "تقرير الأرباح والخسائر الشامل (P&L)", "icon": ":material/monitoring:"},
+            {"title": "إضافة فاتورة وحركة متعددة البنود", "icon": ":material/post_add:"},
+            {"title": "دفتر الحركات وسجل الفواتير", "icon": ":material/receipt_long:"},
+            {"title": "التحويل بين الخزائن والصرافة", "icon": ":material/currency_exchange:"},
+            {"title": "تعديل / إلغاء حركة مالية", "icon": ":material/edit_note:"},
+            {"title": "طباعة السندات وتصدير التقارير", "icon": ":material/print:"},
+        ]
+    },
+    {
         "category": "المشاريع والشركاء",
         "icon": ":material/domain:",
         "desc": "إدارة تكاليف المشاريع، أتعاب الإدارة، كشوفات المستثمرين، وهيكل رأس المال.",
@@ -349,18 +347,6 @@ MODULE_CATALOG = [
             {"title": "حسابات المشاريع والمستثمرين", "icon": ":material/domain_verification:"},
             {"title": "كشوفات حسابات المستثمرين", "icon": ":material/manage_accounts:"},
             {"title": "هيكل الشركاء ورأس المال والأرباح", "icon": ":material/handshake:"},
-        ]
-    },
-    {
-        "category": "العمليات المالية والمحاسبة",
-        "icon": ":material/account_balance:",
-        "desc": "تسجيل الفواتير الذري، دفتر القيود العام، الصرافة الداخلية، وإصدار السندات.",
-        "items": [
-            {"title": "إضافة فاتورة وحركة متعددة البنود", "icon": ":material/post_add:"},
-            {"title": "دفتر الحركات وسجل الفواتير", "icon": ":material/receipt_long:"},
-            {"title": "التحويل بين الخزائن والصرافة", "icon": ":material/currency_exchange:"},
-            {"title": "تعديل / إلغاء حركة مالية", "icon": ":material/edit_note:"},
-            {"title": "طباعة السندات وتصدير التقارير", "icon": ":material/print:"},
         ]
     },
     {
@@ -386,7 +372,6 @@ MODULE_CATALOG = [
     },
 ]
 
-# تصفية القطاعات وفق الصلاحيات الفعلية
 user_categories = []
 for cat in MODULE_CATALOG:
     valid_items = [it for it in cat["items"] if it["title"] in allowed_menus]
@@ -401,9 +386,6 @@ for cat in MODULE_CATALOG:
 if "current_page" not in st.session_state:
     st.session_state.current_page = "HOME"
 
-# ----------------------------------------------------
-# 5. شريط المسار العلوي الموحد (مع اللوغو المباشر)
-# ----------------------------------------------------
 col_b1, col_b2, col_b3 = st.columns([1.3, 2.7, 1])
 
 with col_b1:
@@ -412,7 +394,6 @@ with col_b1:
             st.session_state.current_page = "HOME"
             st.rerun()
     else:
-        # حقن اللوغو بجانب اسم الشركة
         img_element = f'<img src="{logo_base64}" class="brand-header-logo">' if logo_base64 else '🏛️'
         st.markdown(f"""
             <div class="brand-header-badge">
@@ -459,9 +440,6 @@ with col_b3:
 
 st.markdown("<hr style='border: 0.5px solid #D0D7DE; margin-top: 10px; margin-bottom: 20px;'>", unsafe_allow_html=True)
 
-# ----------------------------------------------------
-# 6. شاشة البوابة المركزية الديناميكية (Fluid Auto-Fit Grid)
-# ----------------------------------------------------
 if st.session_state.current_page == "HOME":
     st.markdown("### :material/grid_view: بوابة العمليات والقطاعات التنفيذية")
     st.caption("حدد القطاع أو الشاشة المطلوبة للبدء المباشر:")
@@ -480,9 +458,6 @@ if st.session_state.current_page == "HOME":
                         st.session_state.current_page = it["title"]
                         st.rerun()
 
-# ----------------------------------------------------
-# 7. توجيه الشاشات التابعة
-# ----------------------------------------------------
 else:
     target = st.session_state.current_page
 
@@ -490,6 +465,8 @@ else:
         render_dashboard()
     elif target == factory_menu_title:
         render_stone_factory()
+    elif target == "تقرير الأرباح والخسائر الشامل (P&L)":
+        render_pnl_statement()
     elif target == "هيكل الشركاء ورأس المال والأرباح":
         render_partners(current_user)
     elif target == "كشوفات حسابات المستثمرين":
