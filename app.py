@@ -39,7 +39,7 @@ st.set_page_config(
 )
 
 # ----------------------------------------------------
-# 2. الهوية البصرية وضبط استقرار الواجهة وGlide Data Grid
+# 2. الهوية البصرية وتثبيت مقبض القائمة في منتصف الشاشة
 # ----------------------------------------------------
 st.markdown("""
     <style>
@@ -56,14 +56,14 @@ st.markdown("""
         text-align: right !important;
     }
     
-    /* ضبط محاذاة الأيقونات المتجهة */
+    /* ضبط أيقونات Material المتجهة */
     span[data-testid="stIconMaterial"] {
         font-family: 'Material Symbols Outlined' !important;
         vertical-align: middle !important;
         font-size: 1.15rem !important;
     }
 
-    /* عزل محرك Glide Data Grid والكانفاس لمنع تشوه الأعمدة */
+    /* عزل محرك Glide Data Grid لمنع تشوه الأعمدة */
     [data-testid="stDataFrame"], 
     [data-testid="stDataEditor"],
     [data-testid="stDataFrame"] *, 
@@ -82,50 +82,58 @@ st.markdown("""
         visibility: hidden !important;
     }
 
+    /* تفريغ الهيدر لمنع حجب النقرات ومنع اقتطاع العناصر */
     header[data-testid="stHeader"] {
         background: transparent !important;
-        height: 1rem !important;
+        pointer-events: none !important;
+        height: 0px !important;
     }
 
-    /* تثبيت زر فتح الشريط الجانبي في منتصف الشاشة كـ Floating Handle */
+    /* مقبض عائم لفتح الشريط الجانبي في منتصف ارتفاع الشاشة */
     [data-testid="stSidebarCollapsedControl"] {
         position: fixed !important;
         top: 50% !important;
-        right: 0.75rem !important;
-        bottom: auto !important;
-        left: auto !important;
+        left: 0px !important;
+        right: auto !important;
         transform: translateY(-50%) !important;
         display: flex !important;
         visibility: visible !important;
         align-items: center !important;
         justify-content: center !important;
-        width: 2.6rem !important;
-        height: 2.6rem !important;
-        color: #0F4733 !important;
-        background-color: #FFFFFF !important;
-        border: 1.5px solid #0F4733 !important;
-        border-radius: 8px !important;
-        box-shadow: 0 4px 14px rgba(15, 71, 51, 0.2) !important;
-        z-index: 999999 !important;
+        width: 34px !important;
+        height: 52px !important;
+        background-color: #0F4733 !important;
+        border: 1.5px solid #BE9D5F !important;
+        border-left: none !important;
+        border-radius: 0 8px 8px 0 !important;
+        box-shadow: 3px 0 12px rgba(15, 71, 51, 0.35) !important;
+        z-index: 9999999 !important;
+        pointer-events: auto !important;
         cursor: pointer !important;
         transition: all 0.2s ease-in-out !important;
     }
-    
+
     [data-testid="stSidebarCollapsedControl"]:hover {
-        background-color: #0F4733 !important;
+        width: 40px !important;
+        background-color: #BE9D5F !important;
+        border-color: #0F4733 !important;
+    }
+
+    [data-testid="stSidebarCollapsedControl"] svg,
+    [data-testid="stSidebarCollapsedControl"] button {
         color: #FFFFFF !important;
-        border-color: #BE9D5F !important;
-        box-shadow: 0 6px 18px rgba(15, 71, 51, 0.3) !important;
+        fill: #FFFFFF !important;
     }
     
     .stApp { 
         background-color: #F9F9F8 !important; 
     }
     
-    /* تخصيص الشريط الجانبي */
+    /* تنسيق الشريط الجانبي */
     section[data-testid="stSidebar"] {
         background-color: #FFFFFF !important;
-        border-left: 1px solid #D0D7DE !important;
+        border-right: 1px solid #D0D7DE !important;
+        border-left: none !important;
         padding-top: 1rem !important;
         direction: rtl !important;
     }
@@ -363,6 +371,7 @@ MODULE_CATALOG = [
     },
 ]
 
+# تصفية الكتالوج وفق الصلاحيات
 user_categories = []
 for cat in MODULE_CATALOG:
     valid_items = [it for it in cat["items"] if it["title"] in allowed_menus]
@@ -373,8 +382,19 @@ for cat in MODULE_CATALOG:
             "items": valid_items
         })
 
+# تثبيت الشاشة المحددة في الـ Session State لضمان التزامن
+if "active_screen" not in st.session_state or st.session_state.active_screen not in allowed_menus:
+    st.session_state.active_screen = allowed_menus[0]
+
+# تحديد القطاع النشط بناءً على الشاشة الحالية
+active_cat = user_categories[0]
+for cat in user_categories:
+    if any(it["title"] == st.session_state.active_screen for it in cat["items"]):
+        active_cat = cat
+        break
+
 # ----------------------------------------------------
-# 5. بناء الشريط الجانبي الهرمي (Sidebar Hub)
+# 5. الشريط الجانبي الهرمي
 # ----------------------------------------------------
 with st.sidebar:
     st.markdown("""
@@ -393,15 +413,28 @@ with st.sidebar:
 
     st.caption("القطاع الرئيسي")
     cat_names = [f"{c['icon']} {c['category']}" for c in user_categories]
-    selected_cat_str = st.radio("اختر القطاع:", cat_names, label_visibility="collapsed", key="nav_main_cat")
+    current_cat_idx = [i for i, c in enumerate(user_categories) if c['category'] == active_cat['category']]
+    
+    selected_cat_str = st.radio("اختر القطاع:", cat_names, index=current_cat_idx[0] if current_cat_idx else 0, label_visibility="collapsed", key="sidebar_cat_radio")
     selected_cat = next(c for c in user_categories if f"{c['icon']} {c['category']}" == selected_cat_str)
 
     st.markdown("<hr style='border: 0.5px solid #E1E4E8; margin: 12px 0;'>", unsafe_allow_html=True)
 
     st.caption("الشاشات والعمليات المتاحة")
     item_labels = [f"{it['icon']} {it['title']}" for it in selected_cat["items"]]
-    selected_item_str = st.radio("اختر الشاشة:", item_labels, label_visibility="collapsed", key=f"nav_sub_screen_{selected_cat['category']}")
-    selected_screen_title = next(it["title"] for it in selected_cat["items"] if f"{it['icon']} {it['title']}" == selected_item_str)
+    
+    current_item_idx = 0
+    for idx, it in enumerate(selected_cat["items"]):
+        if it["title"] == st.session_state.active_screen:
+            current_item_idx = idx
+            break
+
+    selected_item_str = st.radio("اختر الشاشة:", item_labels, index=current_item_idx, label_visibility="collapsed", key=f"sidebar_item_radio_{selected_cat['category']}")
+    new_screen = next(it["title"] for it in selected_cat["items"] if f"{it['icon']} {it['title']}" == selected_item_str)
+    
+    if new_screen != st.session_state.active_screen:
+        st.session_state.active_screen = new_screen
+        st.rerun()
 
     st.markdown("<hr style='border: 0.5px solid #E1E4E8; margin: 16px 0;'>", unsafe_allow_html=True)
     
@@ -411,22 +444,36 @@ with st.sidebar:
         st.rerun()
 
 # ----------------------------------------------------
-# 6. شريط المسار (Breadcrumbs) والتوجيه التنفيذي
+# 6. شريط المسار + التنقل السريع الفوري (In-Page Navigation)
 # ----------------------------------------------------
-st.markdown(f"""
-    <div style="display: flex; align-items: center; justify-content: space-between; background: #FFFFFF; padding: 8px 16px; border-radius: 6px; border: 1px solid #D0D7DE; margin-bottom: 20px;">
-        <div style="font-size: 0.85rem; color: #57606A;">
+c_bread, c_quick = st.columns([2.5, 1.5])
+with c_bread:
+    st.markdown(f"""
+        <div style="background: #FFFFFF; padding: 7px 14px; border-radius: 6px; border: 1px solid #D0D7DE; margin-bottom: 15px; font-size: 0.85rem; color: #57606A; line-height: 28px;">
             <span>الرئيسية</span> &nbsp;›&nbsp; 
-            <span>{selected_cat['category']}</span> &nbsp;›&nbsp; 
-            <b style="color: #0F4733;">{selected_screen_title}</b>
+            <span>{active_cat['category']}</span> &nbsp;›&nbsp; 
+            <b style="color: #0F4733;">{st.session_state.active_screen}</b>
         </div>
-        <div style="font-size: 0.75rem; background: #F6F8FA; padding: 2px 8px; border-radius: 12px; border: 1px solid #D0D7DE; color: #0F4733; font-weight: bold;">
-            {ROLE_NAME_AR.get(user_role, user_role)}
-        </div>
-    </div>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
-# توجيه الموديولات
+with c_quick:
+    # محول تنقل مباشر من قلب الصفحة يمنع الحصار عند انغلاق القائمة
+    quick_choice = st.selectbox(
+        "الانتقال السريع للشاشات:",
+        allowed_menus,
+        index=allowed_menus.index(st.session_state.active_screen),
+        label_visibility="collapsed",
+        key="in_page_quick_jump"
+    )
+    if quick_choice != st.session_state.active_screen:
+        st.session_state.active_screen = quick_choice
+        st.rerun()
+
+# ----------------------------------------------------
+# 7. توجيه الموديولات البرمجية
+# ----------------------------------------------------
+selected_screen_title = st.session_state.active_screen
+
 if selected_screen_title == "لوحة المؤشرات العامة والأرصدة":
     render_dashboard()
 elif selected_screen_title == factory_menu_title:
