@@ -27,7 +27,7 @@ from modules.operations import (
 from modules.admin import render_admin
 
 # ----------------------------------------------------
-# 1. إعدادات الصفحة
+# 1. إعدادات الصفحة (شاشة كاملة بدون سايدبار)
 # ----------------------------------------------------
 logo_filename = "MA Logo.png" if os.path.exists("MA Logo.png") else None
 
@@ -35,11 +35,11 @@ st.set_page_config(
     page_title="شركة MA العقارية | منظومة الإدارة والرقابة المالية",
     page_icon=logo_filename if logo_filename else "🏛️",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
 # ----------------------------------------------------
-# 2. الهوية البصرية وتثبيت مقبض القائمة في منتصف الشاشة
+# 2. الهوية البصرية وإلغاء الـ Sidebar نهائياً
 # ----------------------------------------------------
 st.markdown("""
     <style>
@@ -50,13 +50,13 @@ st.markdown("""
         font-family: 'Cairo', sans-serif !important; 
     }
     
-    /* اتجاه الواجهة العام RTL */
+    /* ضبط اتجاه الواجهة العام RTL */
     .block-container, p, label, .stMarkdown, .stText, h1, h2, h3, h4, h5, h6 {
         direction: rtl !important;
         text-align: right !important;
     }
     
-    /* ضبط أيقونات Material المتجهة */
+    /* ضبط محاذاة الأيقونات المتجهة */
     span[data-testid="stIconMaterial"] {
         font-family: 'Material Symbols Outlined' !important;
         vertical-align: middle !important;
@@ -72,7 +72,10 @@ st.markdown("""
         text-align: left !important;
     }
 
-    /* إخفاء عناصر المطور والفوتر */
+    /* إخفاء الـ Sidebar والـ Header والفوتر نهائياً لتفريغ المساحة بالكامل */
+    [data-testid="stSidebar"], 
+    [data-testid="collapsedControl"], 
+    header[data-testid="stHeader"],
     #MainMenu, 
     footer, 
     .stAppDeployButton,
@@ -82,67 +85,35 @@ st.markdown("""
         visibility: hidden !important;
     }
 
-    /* تفريغ الهيدر لمنع حجب النقرات ومنع اقتطاع العناصر */
-    header[data-testid="stHeader"] {
-        background: transparent !important;
-        pointer-events: none !important;
-        height: 0px !important;
-    }
-
-    /* مقبض عائم لفتح الشريط الجانبي في منتصف ارتفاع الشاشة */
-    [data-testid="stSidebarCollapsedControl"] {
-        position: fixed !important;
-        top: 50% !important;
-        left: 0px !important;
-        right: auto !important;
-        transform: translateY(-50%) !important;
-        display: flex !important;
-        visibility: visible !important;
-        align-items: center !important;
-        justify-content: center !important;
-        width: 34px !important;
-        height: 52px !important;
-        background-color: #0F4733 !important;
-        border: 1.5px solid #BE9D5F !important;
-        border-left: none !important;
-        border-radius: 0 8px 8px 0 !important;
-        box-shadow: 3px 0 12px rgba(15, 71, 51, 0.35) !important;
-        z-index: 9999999 !important;
-        pointer-events: auto !important;
-        cursor: pointer !important;
-        transition: all 0.2s ease-in-out !important;
-    }
-
-    [data-testid="stSidebarCollapsedControl"]:hover {
-        width: 40px !important;
-        background-color: #BE9D5F !important;
-        border-color: #0F4733 !important;
-    }
-
-    [data-testid="stSidebarCollapsedControl"] svg,
-    [data-testid="stSidebarCollapsedControl"] button {
-        color: #FFFFFF !important;
-        fill: #FFFFFF !important;
-    }
-    
     .stApp { 
         background-color: #F9F9F8 !important; 
     }
-    
-    /* تنسيق الشريط الجانبي */
-    section[data-testid="stSidebar"] {
-        background-color: #FFFFFF !important;
-        border-right: 1px solid #D0D7DE !important;
-        border-left: none !important;
-        padding-top: 1rem !important;
-        direction: rtl !important;
+
+    /* بطاقات القطاعات الرئيسية في لوحة البوابة */
+    .hub-category-card {
+        background: #FFFFFF;
+        border: 1px solid #D0D7DE;
+        border-top: 4px solid #0F4733;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 20px;
+        box-shadow: 0 1px 3px rgba(31, 35, 40, 0.04);
+        min-height: 240px;
     }
-    section[data-testid="stSidebar"] * {
-        direction: rtl !important;
-        text-align: right !important;
+    
+    .hub-category-title {
+        color: #0F4733;
+        font-size: 1.05rem;
+        font-weight: 800;
+        margin-bottom: 12px;
+        border-bottom: 1px solid #E1E4E8;
+        padding-bottom: 6px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
     }
 
-    /* بطاقات المؤشرات */
+    /* بطاقات المؤشرات الرقمية */
     .metric-card { 
         background: #FFFFFF; 
         border-radius: 6px; 
@@ -230,6 +201,7 @@ if not st.session_state.authenticated:
                         else:
                             st.session_state.authenticated = True
                             st.session_state.user_info = user_data
+                            st.session_state.current_page = "HOME"
                             st.rerun()
                     else:
                         st.error("اسم المستخدم أو كلمة المرور غير صحيحة.")
@@ -238,7 +210,7 @@ if not st.session_state.authenticated:
     st.stop()
 
 # ----------------------------------------------------
-# 4. فهرس الشاشات والهيكل الهرمي للصلاحيات
+# 4. كتالوج المنظومة والأدوار
 # ----------------------------------------------------
 current_user = st.session_state.user_info
 user_role = current_user['role']
@@ -382,129 +354,130 @@ for cat in MODULE_CATALOG:
             "items": valid_items
         })
 
-# تثبيت الشاشة المحددة في الـ Session State لضمان التزامن
-if "active_screen" not in st.session_state or st.session_state.active_screen not in allowed_menus:
-    st.session_state.active_screen = allowed_menus[0]
-
-# تحديد القطاع النشط بناءً على الشاشة الحالية
-active_cat = user_categories[0]
-for cat in user_categories:
-    if any(it["title"] == st.session_state.active_screen for it in cat["items"]):
-        active_cat = cat
-        break
+# حالة الشاشة النشطة
+if "current_page" not in st.session_state:
+    st.session_state.current_page = "HOME"
 
 # ----------------------------------------------------
-# 5. الشريط الجانبي الهرمي
+# 5. شريط المسار العلوي الموحد (Navigation & Breadcrumbs Bar)
 # ----------------------------------------------------
-with st.sidebar:
-    st.markdown("""
-        <div style="text-align: center; margin-bottom: 12px;">
-            <h3 style="color: #0F4733; margin: 0; font-weight: 800; font-size: 1.25rem;">MA Real Estate</h3>
-            <div style="color: #BE9D5F; font-size: 0.8rem; font-weight: 700;">منظومة الرقابة المالية</div>
-        </div>
-    """, unsafe_allow_html=True)
+col_b1, col_b2, col_b3 = st.columns([1.2, 2.8, 1])
+
+with col_b1:
+    if st.session_state.current_page != "HOME":
+        if st.button("العودة للرئيسية", icon=":material/arrow_forward:", use_container_width=True):
+            st.session_state.current_page = "HOME"
+            st.rerun()
+    else:
+        st.markdown("""
+            <div style="background: #0F4733; color: white; padding: 6px 12px; border-radius: 6px; font-weight: bold; text-align: center; font-size: 0.9rem;">
+                🏛️ شركة MA العقارية
+            </div>
+        """, unsafe_allow_html=True)
+
+with col_b2:
+    if st.session_state.current_page == "HOME":
+        st.markdown("""
+            <div style="background: #FFFFFF; padding: 6px 14px; border-radius: 6px; border: 1px solid #D0D7DE; font-size: 0.85rem; color: #57606A; line-height: 24px;">
+                <b>الرئيسية</b> &nbsp;›&nbsp; <span>بوابة القطاعات والخدمات المركزية</span>
+            </div>
+        """, unsafe_allow_html=True)
+    else:
+        # البحث عن اسم القطاع
+        cat_title = "القطاع المالي"
+        for c in user_categories:
+            if any(it["title"] == st.session_state.current_page for it in c["items"]):
+                cat_title = c["category"]
+                break
+        st.markdown(f"""
+            <div style="background: #FFFFFF; padding: 6px 14px; border-radius: 6px; border: 1px solid #D0D7DE; font-size: 0.85rem; color: #57606A; line-height: 24px;">
+                <span>الرئيسية</span> &nbsp;›&nbsp; 
+                <span>{cat_title}</span> &nbsp;›&nbsp; 
+                <b style="color: #0F4733;">{st.session_state.current_page}</b>
+            </div>
+        """, unsafe_allow_html=True)
+
+with col_b3:
+    col_u_name, col_u_out = st.columns([2, 1])
+    with col_u_name:
+        st.markdown(f"""
+            <div style="background: #F6F8FA; padding: 6px; border-radius: 6px; border: 1px solid #D0D7DE; font-size: 0.75rem; text-align: center; color: #1F2328; font-weight: bold;">
+                {current_user['full_name']}
+            </div>
+        """, unsafe_allow_html=True)
+    with col_u_out:
+        if st.button("", icon=":material/logout:", help="تسجيل الخروج", use_container_width=True):
+            st.session_state.authenticated = False
+            st.session_state.user_info = None
+            st.session_state.current_page = "HOME"
+            st.rerun()
+
+st.markdown("<hr style='border: 0.5px solid #D0D7DE; margin-top: 10px; margin-bottom: 20px;'>", unsafe_allow_html=True)
+
+# ----------------------------------------------------
+# 6. شاشة البوابة الرئيسية (HOME HUB)
+# ----------------------------------------------------
+if st.session_state.current_page == "HOME":
+    st.markdown("### :material/grid_view: بوابة الوصول السريع لمنظومة العمل")
+    st.caption("حدد القطاع أو الشاشة المطلوبة لمباشرة العمليات:")
+
+    # توزيع القطاعات كشبكة تفاعلية (Grid of Category Hubs)
+    cols = st.columns(3)
     
-    st.markdown(f"""
-        <div style="background: #F6F8FA; border: 1px solid #D0D7DE; border-radius: 6px; padding: 10px; margin-bottom: 16px;">
-            <div style="font-size: 0.85rem; font-weight: 700; color: #1F2328;">{current_user['full_name']}</div>
-            <div style="font-size: 0.75rem; color: #57606A; margin-top: 2px;">{ROLE_NAME_AR.get(user_role, user_role)}</div>
-        </div>
-    """, unsafe_allow_html=True)
-
-    st.caption("القطاع الرئيسي")
-    cat_names = [f"{c['icon']} {c['category']}" for c in user_categories]
-    current_cat_idx = [i for i, c in enumerate(user_categories) if c['category'] == active_cat['category']]
-    
-    selected_cat_str = st.radio("اختر القطاع:", cat_names, index=current_cat_idx[0] if current_cat_idx else 0, label_visibility="collapsed", key="sidebar_cat_radio")
-    selected_cat = next(c for c in user_categories if f"{c['icon']} {c['category']}" == selected_cat_str)
-
-    st.markdown("<hr style='border: 0.5px solid #E1E4E8; margin: 12px 0;'>", unsafe_allow_html=True)
-
-    st.caption("الشاشات والعمليات المتاحة")
-    item_labels = [f"{it['icon']} {it['title']}" for it in selected_cat["items"]]
-    
-    current_item_idx = 0
-    for idx, it in enumerate(selected_cat["items"]):
-        if it["title"] == st.session_state.active_screen:
-            current_item_idx = idx
-            break
-
-    selected_item_str = st.radio("اختر الشاشة:", item_labels, index=current_item_idx, label_visibility="collapsed", key=f"sidebar_item_radio_{selected_cat['category']}")
-    new_screen = next(it["title"] for it in selected_cat["items"] if f"{it['icon']} {it['title']}" == selected_item_str)
-    
-    if new_screen != st.session_state.active_screen:
-        st.session_state.active_screen = new_screen
-        st.rerun()
-
-    st.markdown("<hr style='border: 0.5px solid #E1E4E8; margin: 16px 0;'>", unsafe_allow_html=True)
-    
-    if st.button("تسجيل الخروج", icon=":material/logout:", use_container_width=True):
-        st.session_state.authenticated = False
-        st.session_state.user_info = None
-        st.rerun()
+    for idx, cat in enumerate(user_categories):
+        col_target = cols[idx % 3]
+        with col_target:
+            st.markdown(f"""
+                <div class="hub-category-card">
+                    <div class="hub-category-title">
+                        {cat['icon']} {cat['category']}
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            for it in cat["items"]:
+                if st.button(it["title"], icon=it["icon"], use_container_width=True, key=f"hub_btn_{it['title']}"):
+                    st.session_state.current_page = it["title"]
+                    st.rerun()
+            st.markdown("<br>", unsafe_allow_html=True)
 
 # ----------------------------------------------------
-# 6. شريط المسار + التنقل السريع الفوري (In-Page Navigation)
+# 7. توجيه الشاشات التابعة (Spokes)
 # ----------------------------------------------------
-c_bread, c_quick = st.columns([2.5, 1.5])
-with c_bread:
-    st.markdown(f"""
-        <div style="background: #FFFFFF; padding: 7px 14px; border-radius: 6px; border: 1px solid #D0D7DE; margin-bottom: 15px; font-size: 0.85rem; color: #57606A; line-height: 28px;">
-            <span>الرئيسية</span> &nbsp;›&nbsp; 
-            <span>{active_cat['category']}</span> &nbsp;›&nbsp; 
-            <b style="color: #0F4733;">{st.session_state.active_screen}</b>
-        </div>
-    """, unsafe_allow_html=True)
+else:
+    target = st.session_state.current_page
 
-with c_quick:
-    # محول تنقل مباشر من قلب الصفحة يمنع الحصار عند انغلاق القائمة
-    quick_choice = st.selectbox(
-        "الانتقال السريع للشاشات:",
-        allowed_menus,
-        index=allowed_menus.index(st.session_state.active_screen),
-        label_visibility="collapsed",
-        key="in_page_quick_jump"
-    )
-    if quick_choice != st.session_state.active_screen:
-        st.session_state.active_screen = quick_choice
-        st.rerun()
-
-# ----------------------------------------------------
-# 7. توجيه الموديولات البرمجية
-# ----------------------------------------------------
-selected_screen_title = st.session_state.active_screen
-
-if selected_screen_title == "لوحة المؤشرات العامة والأرصدة":
-    render_dashboard()
-elif selected_screen_title == factory_menu_title:
-    render_stone_factory()
-elif selected_screen_title == "هيكل الشركاء ورأس المال والأرباح":
-    render_partners(current_user)
-elif selected_screen_title == "كشوفات حسابات المستثمرين":
-    render_investor_statements()
-elif selected_screen_title == "التحويل بين الخزائن والصرافة":
-    render_vault_transfers(current_user)
-elif selected_screen_title == "طباعة السندات وتصدير التقارير":
-    render_vouchers_and_reports()
-elif selected_screen_title == "مسيرات الرواتب الشهرية":
-    render_payroll(current_user)
-elif selected_screen_title == "جدول دوامات وساعات العمل":
-    render_attendance(current_user)
-elif selected_screen_title == "سجل المواعيد والزيارات":
-    render_appointments(current_user)
-elif selected_screen_title == "إدارة المخزون ومواد المشاريع":
-    render_inventory(current_user)
-elif selected_screen_title == "دليل وتعديل بيانات الأطراف":
-    render_stakeholders(current_user)
-elif selected_screen_title == "دفتر الحركات وسجل الفواتير":
-    render_transactions_ledger()
-elif selected_screen_title == "إضافة فاتورة وحركة متعددة البنود":
-    render_add_invoice(current_user)
-elif selected_screen_title == "تعديل / إلغاء حركة مالية":
-    render_edit_transactions(current_user)
-elif selected_screen_title == "حسابات المشاريع والمستثمرين":
-    render_projects_overview()
-elif selected_screen_title == "الإدارة والتشغيل والتعاقدات":
-    render_admin()
-elif selected_screen_title == "كشف حسابي ودوامي الذاتي":
-    render_employee_portal(current_user)
+    if target == "لوحة المؤشرات العامة والأرصدة":
+        render_dashboard()
+    elif target == factory_menu_title:
+        render_stone_factory()
+    elif target == "هيكل الشركاء ورأس المال والأرباح":
+        render_partners(current_user)
+    elif target == "كشوفات حسابات المستثمرين":
+        render_investor_statements()
+    elif target == "التحويل بين الخزائن والصرافة":
+        render_vault_transfers(current_user)
+    elif target == "طباعة السندات وتصدير التقارير":
+        render_vouchers_and_reports()
+    elif target == "مسيرات الرواتب الشهرية":
+        render_payroll(current_user)
+    elif target == "جدول دوامات وساعات العمل":
+        render_attendance(current_user)
+    elif target == "سجل المواعيد والزيارات":
+        render_appointments(current_user)
+    elif target == "إدارة المخزون ومواد المشاريع":
+        render_inventory(current_user)
+    elif target == "دليل وتعديل بيانات الأطراف":
+        render_stakeholders(current_user)
+    elif target == "دفتر الحركات وسجل الفواتير":
+        render_transactions_ledger()
+    elif target == "إضافة فاتورة وحركة متعددة البنود":
+        render_add_invoice(current_user)
+    elif target == "تعديل / إلغاء حركة مالية":
+        render_edit_transactions(current_user)
+    elif target == "حسابات المشاريع والمستثمرين":
+        render_projects_overview()
+    elif target == "الإدارة والتشغيل والتعاقدات":
+        render_admin()
+    elif target == "كشف حسابي ودوامي الذاتي":
+        render_employee_portal(current_user)
