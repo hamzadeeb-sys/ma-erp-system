@@ -1,5 +1,6 @@
 import streamlit as st
 from datetime import datetime, time
+from psycopg2.errors import UniqueViolation
 from core.db import run_query, get_db_cursor
 
 def render_attendance(current_user):
@@ -79,6 +80,11 @@ def render_payroll(current_user):
             curr_db = str(emp_row['salary_currency'])
             sal_type = str(emp_row.get('salary_type', 'monthly_standard'))
 
+            # التحقق المسبق من وجود مسير سابق لنفس الشهر
+            check_prev = run_query("SELECT id, payment_status, net_salary FROM payroll_records WHERE employee_id = %s AND payroll_month = %s;", (emp_id, p_month))
+            if not check_prev.empty:
+                st.warning(f"⚠️ تنبيه: تم صرف مسير شهر ({p_month}) لهذا الموظف مسبقاً بمبلغ ({check_prev['net_salary'].values[0]:,.2f} {curr_db}). النظام يقفل تكرار الصرف.")
+
             daily_div = 26.0 if sal_type == 'monthly_ex_friday' else (24.0 if sal_type == 'weekly_6days' else 30.0)
             hourly_div = daily_div * 8.0
 
@@ -105,19 +111,40 @@ def render_payroll(current_user):
 
             if current_user['role'] in ["Admin", "Accountant"]:
                 if st.button("اعتماد وصرف المسير المالي", icon=":material/check_circle:"):
+                    if not check_prev.empty:
+                        st.error("مرفوض: لا يمكن صرف أكثر من مسير راتب لنفس الموظف عن الشهر ذاته بموجب قيود النظام.")
+                        return
+
                     sal_id = f"SAL-{p_month}-{emp_id}"
                     v_id = 1 if curr_db == 'USD' else 2
-                    with get_db_cursor(commit=True) as (cur, _):
-                        cur.execute("SELECT exchange_rate FROM transactions WHERE currency = 'SYP' ORDER BY tx_date DESC LIMIT 1;")
-                        s_rate_row = cur.fetchone()
-                        s_rate = float(s_rate_row[0]) if s_rate_row else 131.0
-                        amt_u = net_s if curr_db == 'USD' else (net_s / s_rate)
+                    
+                    try:
+                        with get_db_cursor(commit=True) as (cur, _):
+                            # تمرير هوية المستخدم المنفذ لـ Audit Trail
+                            cur.execute("SET LOCAL app.current_user = %s;", (current_user['username'],))
+                            
+                            cur.execute("SELECT exchange_rate FROM transactions WHERE currency = 'SYP' ORDER BY tx_date DESC LIMIT 1;")
+                            s_rate_row = cur.fetchone()
+                            s_rate = float(s_rate_row[0]) if s_rate_row else 131.0
+                            amt_u = net_s if curr_db == 'USD' else (net_s / s_rate)
 
-                        if net_s > 0:
-                            cur.execute("INSERT INTO transactions (id, tx_date, tx_type, project_id, stakeholder_id, vault_id, amount, currency, exchange_rate, amount_usd, direction, payment_method, description) VALUES (%s, CURRENT_DATE, 'راتب او سلفة', 2, %s, %s, %s, %s, %s, %s, 'OUT', 'كاش', %s);", (sal_id, emp_id, v_id, net_s, curr_db, s_rate if curr_db == 'SYP' else 1.0, amt_u, f"صرف صافي راتب شهر {p_month}"))
-                        cur.execute("INSERT INTO payroll_records (employee_id, payroll_month, base_salary, overtime_hours, overtime_amount, absence_days, deductions, net_salary, currency, payment_status, transaction_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'معتمد', %s);", (emp_id, p_month, base_s, ot_h, ot_val, abs_d, total_ded, net_s, curr_db, sal_id))
-                    st.success("تم صرف المسير وترحيل السند المحاسبي.")
-                    st.rerun()
+                            if net_s > 0:
+                                cur.execute("""
+                                    INSERT INTO transactions (id, tx_date, tx_type, project_id, stakeholder_id, vault_id, amount, currency, exchange_rate, amount_usd, direction, payment_method, description) 
+                                    VALUES (%s, CURRENT_DATE, 'راتب او سلفة', 2, %s, %s, %s, %s, %s, %s, 'OUT', 'كاش', %s);
+                                """, (sal_id, emp_id, v_id, net_s, curr_db, s_rate if curr_db == 'SYP' else 1.0, amt_u, f"صرف صافي راتب شهر {p_month}"))
+
+                            cur.execute("""
+                                INSERT INTO payroll_records (employee_id, payroll_month, base_salary, overtime_hours, overtime_amount, absence_days, deductions, net_salary, currency, payment_status, transaction_id) 
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'معتمد', %s);
+                            """, (emp_id, p_month, base_s, ot_h, ot_val, abs_d, total_ded, net_s, curr_db, sal_id))
+
+                        st.success("تم صرف المسير وترحيل السند وتوثيق العملية في سجل الرقابة بنجاح.")
+                        st.rerun()
+                    except UniqueViolation:
+                        st.error("خطأ قاعدة بيانات: السجل مكرر مسبقاً عن هذا الشهر وتم رفض الترحيل.")
+                    except Exception as ex:
+                        st.error(f"فشلت المعاملة (Rollback): {ex}")
 
 def render_employee_portal(current_user):
     st.subheader(f":material/account_circle: السجل المالي والدوام الذاتي: {current_user['full_name']}")
