@@ -49,7 +49,7 @@ def render_vault_transfers(current_user):
 
             if st.form_submit_button("اعتماد الصرافة وترحيل القيود", icon=":material/sync_alt:"):
                 if not tx_dir or amt_val <= 0 or act_r <= 0 or bench_r <= 0:
-                    st.error("يرجى ملء كافة حقول الصرافة وأسعار الصرف بدقة.")
+                    st.error("يرجى ملء كافة حقول الصرافة وتحديد أسعار الصرف بدقة.")
                 else:
                     from_c = "USD" if "من دولار" in tx_dir else "SYP"
                     to_c = "SYP" if "من دولار" in tx_dir else "USD"
@@ -187,8 +187,8 @@ def render_add_invoice(current_user):
             with st.form("simple_tx_form", clear_on_submit=True):
                 ca1, ca2, ca3 = st.columns(3)
                 with ca1:
-                    # الرقم التسلسلي مقفل نهائياً
-                    st.text_input("رقم السند (توليد آلي غير قابل للتعديل)", value=auto_inv, disabled=True)
+                    # مقفل برمجياً بشكل قطعي وغير قابل للتعديل
+                    st.text_input("رقم السند", value=auto_inv, disabled=True)
                     t_date = st.date_input("التاريخ", datetime.now().date())
                     t_type = st.selectbox(
                         "نوع الحركة", 
@@ -210,8 +210,8 @@ def render_add_invoice(current_user):
                 if st.form_submit_button("حفظ وترحيل السند المالي", icon=":material/save:"):
                     a_val = float(amount_val or 0.0)
                     r_val = float(rate_val or 1.0)
-                    if not p_name or not part_name or not t_type or not curr_choice or not method or a_val <= 0:
-                        st.error("يرجى تعبئة كافة الحقول الإلزامية وتحديد الأطراف والمبالغ.")
+                    if not p_name or not part_name or not t_type or not curr_choice or not method or a_val <= 0 or rate_val is None:
+                        st.error("يرجى تعبئة كافة الحقول وتحديد المشروع والطرف والعملة وسعر الصرف والمبلغ.")
                     else:
                         p_id = int(projs.loc[projs['name'] == p_name, 'id'].values[0])
                         s_id = int(parties.loc[parties['name'] == part_name, 'id'].values[0])
@@ -229,8 +229,8 @@ def render_add_invoice(current_user):
         else:
             c1, c2, c3 = st.columns(3)
             with c1:
-                # الرقم التسلسلي مقفل نهائياً
-                st.text_input("رقم الفاتورة (توليد آلي مقفل)", value=auto_inv, disabled=True)
+                # مقفل برمجياً بشكل قطعي وغير قابل للتعديل
+                st.text_input("رقم الفاتورة", value=auto_inv, disabled=True)
                 t_date_m = st.date_input("التاريخ", datetime.now().date())
             with c2:
                 p_name_m = st.selectbox("المشروع", projs['name'].tolist(), index=None, placeholder="اختر المشروع...", key="multi_inv_proj")
@@ -244,12 +244,11 @@ def render_add_invoice(current_user):
             cats = ["مواد بناء وتأسيس", "إكساء وتشطيب", "أجور معلمين", "أدوات ومعدات", "نقل وشحن", "أخرى"]
             p_list = parties['name'].tolist()
 
-            # جدول البنود: صف أولي فارغ تماماً من القيم المسبقة
             default_df = pd.DataFrame([{
                 "اسم البند": "", 
                 "التصنيف": None, 
-                "الكمية": 0.0, 
-                "السعر الإفرادي": 0.0, 
+                "الكمية": None, 
+                "السعر الإفرادي": None, 
                 "الطرف المستفيد": None, 
                 "خصم من المخزون تلقائياً": False
             }])
@@ -261,8 +260,8 @@ def render_add_invoice(current_user):
                 column_config={
                     "اسم البند": st.column_config.TextColumn("اسم البند / المادة (يطابق المخزون)", required=True),
                     "التصنيف": st.column_config.SelectboxColumn("التصنيف", options=cats, required=True),
-                    "الكمية": st.column_config.NumberColumn("الكمية", min_value=0.01, default=0.0),
-                    "السعر الإفرادي": st.column_config.NumberColumn("السعر الإفرادي", min_value=0.0, default=0.0),
+                    "الكمية": st.column_config.NumberColumn("الكمية", min_value=0.01, default=None),
+                    "السعر الإفرادي": st.column_config.NumberColumn("السعر الإفرادي", min_value=0.0, default=None),
                     "الطرف المستفيد": st.column_config.SelectboxColumn("الطرف المستفيد", options=p_list, required=True),
                     "خصم من المخزون تلقائياً": st.column_config.CheckboxColumn("خصم مخزني", default=False)
                 }
@@ -271,7 +270,9 @@ def render_add_invoice(current_user):
             valid_items = edited_df[
                 (edited_df["اسم البند"].astype(str).str.strip() != "") & 
                 (edited_df["الطرف المستفيد"].notna()) &
-                (edited_df["التصنيف"].notna())
+                (edited_df["التصنيف"].notna()) &
+                (edited_df["الكمية"].notna()) &
+                (edited_df["السعر الإفرادي"].notna())
             ].copy()
 
             if not valid_items.empty:
@@ -282,8 +283,8 @@ def render_add_invoice(current_user):
 
                 if st.button("حفظ الفاتورة ومعالجة قيود المخزون", icon=":material/save:"):
                     r_val_m = float(rate_m or 1.0)
-                    if not p_name_m or not t_type_m or not curr_m or not method_m or total_computed <= 0:
-                        st.error("يرجى تحديد المشروع، نوع الحركة، العملة، طريقة الدفع، والتأكد من إجماليات البنود.")
+                    if not p_name_m or not t_type_m or not curr_m or not method_m or rate_m is None or total_computed <= 0:
+                        st.error("يرجى تحديد المشروع، نوع الحركة، العملة، سعر الصرف، طريقة الدفع، والتأكد من البنود.")
                     else:
                         p_id = int(projs.loc[projs['name'] == p_name_m, 'id'].values[0])
                         v_id = 1 if curr_m == 'USD' else 2
