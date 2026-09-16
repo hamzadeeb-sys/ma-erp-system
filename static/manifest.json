@@ -1,0 +1,23 @@
+{
+  "name": "MA Real Estate ERP",
+  "short_name": "MA ERP",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F9F9F8",
+  "theme_color": "#0F4733",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/app/static/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/app/static/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
