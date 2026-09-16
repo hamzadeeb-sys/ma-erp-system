@@ -34,11 +34,12 @@ logo_filename = "MA Logo.png" if os.path.exists("MA Logo.png") else None
 st.set_page_config(
     page_title="شركة MA العقارية | منظومة الإدارة والرقابة المالية",
     page_icon=logo_filename if logo_filename else "🏛️",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 # ----------------------------------------------------
-# 2. الهوية البصرية وضبط استقرار Glide Data Grid و Outline Icons
+# 2. الهوية البصرية وضبط استقرار الواجهة وGlide Data Grid
 # ----------------------------------------------------
 st.markdown("""
     <style>
@@ -55,11 +56,11 @@ st.markdown("""
         text-align: right !important;
     }
     
-    /* محاذاة أيقونات Material المتجهة */
+    /* ضبط محاذاة الأيقونات المتجهة */
     span[data-testid="stIconMaterial"] {
         font-family: 'Material Symbols Outlined' !important;
         vertical-align: middle !important;
-        font-size: 1.2rem !important;
+        font-size: 1.15rem !important;
     }
 
     /* عزل محرك Glide Data Grid والكانفاس لمنع تشوه الأعمدة */
@@ -79,7 +80,19 @@ st.markdown("""
         background-color: #F9F9F8 !important; 
     }
     
-    /* بطاقات المؤشرات بهوية Octicon/GitHub */
+    /* تخصيص الشريط الجانبي */
+    section[data-testid="stSidebar"] {
+        background-color: #FFFFFF !important;
+        border-left: 1px solid #D0D7DE !important;
+        padding-top: 1.5rem !important;
+        direction: rtl !important;
+    }
+    section[data-testid="stSidebar"] * {
+        direction: rtl !important;
+        text-align: right !important;
+    }
+
+    /* بطاقات المؤشرات */
     .metric-card { 
         background: #FFFFFF; 
         border-radius: 6px; 
@@ -119,7 +132,6 @@ st.markdown("""
         text-align: right !important; 
     }
 
-    /* أزرار على نمط أزرار الأدوات في GitHub */
     .stButton > button, .stDownloadButton > button { 
         background-color: #0F4733 !important; 
         color: #FFFFFF !important; 
@@ -176,11 +188,20 @@ if not st.session_state.authenticated:
     st.stop()
 
 # ----------------------------------------------------
-# 4. التحكم بالأدوار والصلاحيات
+# 4. فهرس الشاشات والهيكل الهرمي للصلاحيات
 # ----------------------------------------------------
 current_user = st.session_state.user_info
 user_role = current_user['role']
 factory_menu_title = "حسابات وخزنة معمل الحجر"
+
+ROLE_NAME_AR = {
+    "Admin": "مدير النظام العام",
+    "Manager": "المدير العام",
+    "Accountant": "محاسب الشركة",
+    "Partner": "شريك ومساهم",
+    "Secretary": "استقبال وإدارة مكتبية",
+    "Employee": "موظف"
+}
 
 if user_role == "Admin":
     allowed_menus = [
@@ -250,67 +271,156 @@ else:
         "كشف حسابي ودوامي الذاتي"
     ]
 
-ROLE_NAME_AR = {
-    "Admin": "مدير النظام العام",
-    "Manager": "المدير العام",
-    "Accountant": "محاسب الشركة",
-    "Partner": "شريك ومساهم",
-    "Secretary": "استقبال وإدارة مكتبية",
-    "Employee": "موظف"
-}
+# الكتالوج الهرمي للوحدات
+MODULE_CATALOG = [
+    {
+        "category": "لوحة القيادة والمؤشرات",
+        "icon": ":material/dashboard:",
+        "items": [
+            {"title": "لوحة المؤشرات العامة والأرصدة", "icon": ":material/analytics:"},
+            {"title": factory_menu_title, "icon": ":material/precision_manufacturing:"},
+        ]
+    },
+    {
+        "category": "العمليات المالية والمحاسبة",
+        "icon": ":material/account_balance:",
+        "items": [
+            {"title": "إضافة فاتورة وحركة متعددة البنود", "icon": ":material/post_add:"},
+            {"title": "دفتر الحركات وسجل الفواتير", "icon": ":material/receipt_long:"},
+            {"title": "التحويل بين الخزائن والصرافة", "icon": ":material/currency_exchange:"},
+            {"title": "تعديل / إلغاء حركة مالية", "icon": ":material/edit_note:"},
+            {"title": "طباعة السندات وتصدير التقارير", "icon": ":material/print:"},
+        ]
+    },
+    {
+        "category": "المشاريع والشركاء",
+        "icon": ":material/domain:",
+        "items": [
+            {"title": "حسابات المشاريع والمستثمرين", "icon": ":material/domain_verification:"},
+            {"title": "كشوفات حسابات المستثمرين", "icon": ":material/manage_accounts:"},
+            {"title": "هيكل الشركاء ورأس المال والأرباح", "icon": ":material/handshake:"},
+        ]
+    },
+    {
+        "category": "الموارد البشرية والمكتب",
+        "icon": ":material/badge:",
+        "items": [
+            {"title": "جدول دوامات وساعات العمل", "icon": ":material/schedule:"},
+            {"title": "مسيرات الرواتب الشهرية", "icon": ":material/payments:"},
+            {"title": "سجل المواعيد والزيارات", "icon": ":material/calendar_today:"},
+            {"title": "كشف حسابي ودوامي الذاتي", "icon": ":material/account_circle:"},
+        ]
+    },
+    {
+        "category": "المستودع والإدارة العامة",
+        "icon": ":material/settings:",
+        "items": [
+            {"title": "إدارة المخزون ومواد المشاريع", "icon": ":material/inventory_2:"},
+            {"title": "دليل وتعديل بيانات الأطراف", "icon": ":material/group:"},
+            {"title": "الإدارة والتشغيل والتعاقدات", "icon": ":material/admin_panel_settings:"},
+        ]
+    },
+]
 
-st.markdown(f"""
-    <div style="background-color: #0F4733; padding: 10px 18px; border-radius: 6px; border: 1px solid #BE9D5F; text-align: center; margin-bottom: 18px; color: white; font-size: 0.95rem;">
-        <b>شركة MA للتطوير العقاري والمقاولات</b> | المستخدم: <u>{current_user['full_name']}</u> ({ROLE_NAME_AR.get(user_role, user_role)})
-    </div>
-""", unsafe_allow_html=True)
+# تصفية الكتالوج وفق الصلاحيات الفعلية للمستخدم
+user_categories = []
+for cat in MODULE_CATALOG:
+    valid_items = [it for it in cat["items"] if it["title"] in allowed_menus]
+    if valid_items:
+        user_categories.append({
+            "category": cat["category"],
+            "icon": cat["icon"],
+            "items": valid_items
+        })
 
-col_nav1, col_nav2, col_nav3 = st.columns([1, 3, 1])
-with col_nav2:
-    menu = st.selectbox("نظام التوجيه والعمليات:", allowed_menus)
-with col_nav3:
-    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-    if st.button("تسجيل الخروج", icon=":material/logout:"):
+# ----------------------------------------------------
+# 5. بناء الشريط الجانبي الهرمي (Sidebar Hub)
+# ----------------------------------------------------
+with st.sidebar:
+    st.markdown("""
+        <div style="text-align: center; margin-bottom: 12px;">
+            <h3 style="color: #0F4733; margin: 0; font-weight: 800; font-size: 1.25rem;">MA Real Estate</h3>
+            <div style="color: #BE9D5F; font-size: 0.8rem; font-weight: 700;">منظومة الرقابة المالية</div>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    # بطاقة تعريف المستخدم
+    st.markdown(f"""
+        <div style="background: #F6F8FA; border: 1px solid #D0D7DE; border-radius: 6px; padding: 10px; margin-bottom: 16px;">
+            <div style="font-size: 0.85rem; font-weight: 700; color: #1F2328;">{current_user['full_name']}</div>
+            <div style="font-size: 0.75rem; color: #57606A; margin-top: 2px;">{ROLE_NAME_AR.get(user_role, user_role)}</div>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # 1. تحديد القطاع الرئيسي
+    st.caption("القطاع الرئيسي")
+    cat_names = [f"{c['icon']} {c['category']}" for c in user_categories]
+    selected_cat_str = st.radio("اختر القطاع:", cat_names, label_visibility="collapsed")
+    selected_cat = next(c for c in user_categories if f"{c['icon']} {c['category']}" == selected_cat_str)
+
+    st.markdown("<hr style='border: 0.5px solid #E1E4E8; margin: 12px 0;'>", unsafe_allow_html=True)
+
+    # 2. تحديد الشاشة الفرعية ضمن القطاع المختار
+    st.caption("الشاشات والعمليات المتاحة")
+    item_labels = [f"{it['icon']} {it['title']}" for it in selected_cat["items"]]
+    selected_item_str = st.radio("اختر الشاشة:", item_labels, label_visibility="collapsed")
+    selected_screen_title = next(it["title"] for it in selected_cat["items"] if f"{it['icon']} {it['title']}" == selected_item_str)
+
+    st.markdown("<hr style='border: 0.5px solid #E1E4E8; margin: 16px 0;'>", unsafe_allow_html=True)
+    
+    if st.button("تسجيل الخروج", icon=":material/logout:", use_container_width=True):
         st.session_state.authenticated = False
         st.session_state.user_info = None
         st.rerun()
 
-st.markdown("<hr style='border: 0.5px solid #D0D7DE; margin-top: 10px; margin-bottom: 20px;'>", unsafe_allow_html=True)
+# ----------------------------------------------------
+# 6. شريط المسار (Breadcrumbs) والتوجيه التنفيذي
+# ----------------------------------------------------
+st.markdown(f"""
+    <div style="display: flex; align-items: center; justify-content: space-between; background: #FFFFFF; padding: 8px 16px; border-radius: 6px; border: 1px solid #D0D7DE; margin-bottom: 20px;">
+        <div style="font-size: 0.85rem; color: #57606A;">
+            <span>الرئيسية</span> &nbsp;›&nbsp; 
+            <span>{selected_cat['category']}</span> &nbsp;›&nbsp; 
+            <b style="color: #0F4733;">{selected_screen_title}</b>
+        </div>
+        <div style="font-size: 0.75rem; background: #F6F8FA; padding: 2px 8px; border-radius: 12px; border: 1px solid #D0D7DE; color: #0F4733; font-weight: bold;">
+            {ROLE_NAME_AR.get(user_role, user_role)}
+        </div>
+    </div>
+""", unsafe_allow_html=True)
 
-# ----------------------------------------------------
-# 5. التوجيه التنفيذي للموديولات
-# ----------------------------------------------------
-if menu == "لوحة المؤشرات العامة والأرصدة":
+# توجيه الموديولات
+if selected_screen_title == "لوحة المؤشرات العامة والأرصدة":
     render_dashboard()
-elif menu == factory_menu_title:
+elif selected_screen_title == factory_menu_title:
     render_stone_factory()
-elif menu == "هيكل الشركاء ورأس المال والأرباح":
+elif selected_screen_title == "هيكل الشركاء ورأس المال والأرباح":
     render_partners(current_user)
-elif menu == "كشوفات حسابات المستثمرين":
+elif selected_screen_title == "كشوفات حسابات المستثمرين":
     render_investor_statements()
-elif menu == "التحويل بين الخزائن والصرافة":
+elif selected_screen_title == "التحويل بين الخزائن والصرافة":
     render_vault_transfers(current_user)
-elif menu == "طباعة السندات وتصدير التقارير":
+elif selected_screen_title == "طباعة السندات وتصدير التقارير":
     render_vouchers_and_reports()
-elif menu == "مسيرات الرواتب الشهرية":
+elif selected_screen_title == "مسيرات الرواتب الشهرية":
     render_payroll(current_user)
-elif menu == "جدول دوامات وساعات العمل":
+elif selected_screen_title == "جدول دوامات وساعات العمل":
     render_attendance(current_user)
-elif menu == "سجل المواعيد والزيارات":
+elif selected_screen_title == "سجل المواعيد والزيارات":
     render_appointments(current_user)
-elif menu == "إدارة المخزون ومواد المشاريع":
+elif selected_screen_title == "إدارة المخزون ومواد المشاريع":
     render_inventory(current_user)
-elif menu == "دليل وتعديل بيانات الأطراف":
+elif selected_screen_title == "دليل وتعديل بيانات الأطراف":
     render_stakeholders(current_user)
-elif menu == "دفتر الحركات وسجل الفواتير":
+elif selected_screen_title == "دفتر الحركات وسجل الفواتير":
     render_transactions_ledger()
-elif menu == "إضافة فاتورة وحركة متعددة البنود":
+elif selected_screen_title == "إضافة فاتورة وحركة متعددة البنود":
     render_add_invoice(current_user)
-elif menu == "تعديل / إلغاء حركة مالية":
+elif selected_screen_title == "تعديل / إلغاء حركة مالية":
     render_edit_transactions(current_user)
-elif menu == "حسابات المشاريع والمستثمرين":
+elif selected_screen_title == "حسابات المشاريع والمستثمرين":
     render_projects_overview()
-elif menu == "الإدارة والتشغيل والتعاقدات":
+elif selected_screen_title == "الإدارة والتشغيل والتعاقدات":
     render_admin()
-elif menu == "كشف حسابي ودوامي الذاتي":
+elif selected_screen_title == "كشف حسابي ودوامي الذاتي":
     render_employee_portal(current_user)
