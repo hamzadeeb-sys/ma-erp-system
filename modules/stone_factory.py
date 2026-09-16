@@ -5,7 +5,7 @@ from core.db import run_query, get_db_cursor
 from core.utils import to_excel_download_link, get_next_invoice_id
 
 def render_stone_factory():
-    st.subheader("🏭 منظومة وحسابات معمل الحجر الصناعي (شراكة مستقلة)")
+    st.subheader(":material/precision_manufacturing: منظومة وحسابات معمل الحجر الصناعي (شراكة مستقلة)")
     st.caption("عقد المشاركة: حصة المعمل (أحمد شيخ) 75% | حصة الشركة (مصعب المصري) 25% | زكاة 2% تُحسم أولاً")
 
     with get_db_cursor() as (cur, _):
@@ -21,14 +21,12 @@ def render_stone_factory():
         v_syp = cur.fetchone()
         v_syp_id = int(v_syp[0]) if v_syp else 4
 
-        # 1. السيولة الحالية الإجمالية في الصناديق
         cur.execute("SELECT COALESCE(SUM(CASE WHEN direction = 'IN' THEN amount ELSE -amount END), 0) FROM transactions WHERE vault_id = %s;", (v_usd_id,))
         fac_bal_usd = float(cur.fetchone()[0] or 0.0)
 
         cur.execute("SELECT COALESCE(SUM(CASE WHEN direction = 'IN' THEN amount ELSE -amount END), 0) FROM transactions WHERE vault_id = %s;", (v_syp_id,))
         fac_bal_syp = float(cur.fetchone()[0] or 0.0)
 
-        # 2. الحسابات المالية للحركات غير المصفّاة فقط (Active Unsettled Transactions)
         cur.execute("""
             SELECT COALESCE(SUM(amount_usd), 0) 
             FROM transactions 
@@ -45,7 +43,6 @@ def render_stone_factory():
         """, (factory_proj_id,))
         fac_total_expenses = float(cur.fetchone()[0] or 0.0)
 
-        # المسحوبات غير المصفاة لكل طرف
         cur.execute("""
             SELECT COALESCE(SUM(t.amount_usd), 0)
             FROM transactions t
@@ -66,7 +63,6 @@ def render_stone_factory():
         """, (factory_proj_id, '%مصعب%'))
         mosab_withdrawals = float(cur.fetchone()[0] or 0.0)
 
-    # الحسبة المالية بموجب نصوص العقد
     gross_factory_profit = fac_total_revenue - fac_total_expenses
     zakat_deduction = (gross_factory_profit * 0.02) if gross_factory_profit > 0 else 0.0
     net_distributable = gross_factory_profit - zakat_deduction if gross_factory_profit > 0 else 0.0
@@ -77,11 +73,11 @@ def render_stone_factory():
     company_net_payable = company_share_25 - mosab_withdrawals
 
     tab_dash, tab_settle, tab_history, tab_tx, tab_new = st.tabs([
-        "📊 أرصدة وسيولة المعمل", 
-        "⚖️ تصفية الأرباح الدورية النشطة",
-        "📜 سجل التصفيات المؤرشفة", 
-        "📑 سجل حركات المعمل", 
-        "➕ إضافة حركة جديدة"
+        ":material/account_balance_wallet: أرصدة وسيولة المعمل", 
+        ":material/balance: تصفية الأرباح الدورية",
+        ":material/history: سجل التصفيات المؤرشفة", 
+        ":material/receipt_long: سجل الحركات", 
+        ":material/add_circle: إضافة حركة جديدة"
     ])
 
     with tab_dash:
@@ -92,7 +88,7 @@ def render_stone_factory():
             st.markdown(f'<div class="metric-card" style="border-top-color: #BE9D5F;"><div class="metric-title">صندوق المعمل (SYP)</div><div class="metric-value-gold">{fac_bal_syp:,.0f} ل.س</div></div>', unsafe_allow_html=True)
 
         st.markdown("---")
-        st.markdown("##### 📈 مؤشرات الدورة الحالية (غير المصفّاة بعد)")
+        st.markdown("##### :material/query_stats: مؤشرات الدورة الحالية (غير المصفّاة)")
         cs1, cs2, cs3, cs4 = st.columns(4)
         with cs1: st.metric("المقبوضات غير المصفاة", f"{fac_total_revenue:,.2f} $")
         with cs2: st.metric("المصاريف غير المصفاة", f"{fac_total_expenses:,.2f} $")
@@ -100,7 +96,7 @@ def render_stone_factory():
         with cs4: st.metric("مخصص الزكاة (2%)", f"{zakat_deduction:,.2f} $")
 
     with tab_settle:
-        st.markdown("#### ⚖️ جدول التصفية والأنصبة المستحقة (للحركات الجارية)")
+        st.markdown("#### :material/table_view: جدول التصفية والأنصبة المستحقة")
         settle_data = [
             {"الطرف": "أحمد شيخ (المعمل)", "النسبة العقدية": "75%", "الأرباح المستحقة ($)": f"{ahmed_share_75:,.2f} $", "المسحوبات السابقة": f"{ahmed_withdrawals:,.2f} $", "الصافي المستحق للصرف": f"{ahmed_net_payable:,.2f} $"},
             {"الطرف": "مصعب المصري / شركة MA", "النسبة العقدية": "25%", "الأرباح المستحقة ($)": f"{company_share_25:,.2f} $", "المسحوبات السابقة": f"{mosab_withdrawals:,.2f} $", "الصافي المستحق للصرف": f"{company_net_payable:,.2f} $"},
@@ -108,7 +104,6 @@ def render_stone_factory():
         ]
         st.dataframe(pd.DataFrame(settle_data), use_container_width=True, hide_index=True)
 
-        # استخراج تواريخ الحركات غير المصفاة
         df_dates = run_query("""
             SELECT MIN(tx_date) AS s_date, MAX(tx_date) AS e_date, COUNT(id) AS cnt 
             FROM transactions 
@@ -120,28 +115,27 @@ def render_stone_factory():
         p_end = df_dates['e_date'].values[0] if has_tx and df_dates['e_date'].values[0] else datetime.now().date()
 
         st.markdown("---")
-        st.markdown("##### 🔒 إغلاق وتثبيت دورة التصفية المحاسبية")
+        st.markdown("##### :material/lock: إغلاق وتثبيت دورة التصفية المحاسبية")
         
         if not has_tx:
-            st.info("لا توجد حركات مالية جديدة غير مصفاة حالياً.")
+            st.info("لا توجد حركات مالية غير مصفاة معلقة في الفترة الحالية.")
         else:
-            st.caption(f"📌 الفترة المقترحة للإغلاق: من **{p_start}** إلى **{p_end}** (إجمالي العمليات المعلقة: {df_dates['cnt'].values[0]})")
+            st.caption(f"الفترة المعنية: من {p_start} إلى {p_end} (عدد الحركات المعلقة: {df_dates['cnt'].values[0]})")
             
             with st.form("execute_factory_settlement_form"):
                 col_s1, col_s2 = st.columns(2)
                 with col_s1:
-                    settle_notes = st.text_input("ملاحظات / توصيف دورة التصفية", value=f"تصفية دورية لمعمل الحجر حتى تاريخ {p_end}")
-                    auto_payout = st.checkbox("ترحيل سندات صرف أوتوماتيكية للأرباح المتبقية من الصندوق", value=False)
+                    settle_notes = st.text_input("ملاحظات دورة التصفية", value=f"تصفية دورية لمعمل الحجر حتى تاريخ {p_end}")
+                    auto_payout = st.checkbox("ترحيل سندات صرف فورية للأرباح المتبقية", value=False)
                 with col_s2:
                     current_user_name = st.session_state.user_info['full_name']
                     st.text_input("المسؤول المعتمد", value=current_user_name, disabled=True)
 
-                if st.form_submit_button("🚀 اعتماد التصفية وإغلاق الفترة نهائياً"):
+                if st.form_submit_button("اعتماد التصفية وإغلاق الفترة", icon=":material/check_circle:"):
                     settlement_key = f"SETTLE-FAC-{datetime.now().strftime('%Y%m%d%H%M%S')}"
                     
                     try:
                         with get_db_cursor(commit=True) as (cur, _):
-                            # 1. تسجيل قيد التصفية الرئيسي
                             cur.execute("""
                                 INSERT INTO factory_settlements (
                                     id, period_start, period_end, total_revenue_usd, total_expenses_usd, 
@@ -158,14 +152,12 @@ def render_stone_factory():
                                 current_user_name, settle_notes
                             ))
 
-                            # 2. قفل كافة الحركات غير المصفاة وإسنادها لرقم التصفية
                             cur.execute("""
                                 UPDATE transactions 
                                 SET settlement_id = %s 
                                 WHERE project_id = %s AND settlement_id IS NULL;
                             """, (settlement_key, factory_proj_id))
 
-                            # 3. ترحيل سندات صرف الأرباح إذا طُلب ذلك
                             if auto_payout:
                                 cur.execute("SELECT id FROM stakeholders WHERE name LIKE '%أحمد شيخ%' LIMIT 1;")
                                 r_ah = cur.fetchone()
@@ -187,13 +179,13 @@ def render_stone_factory():
                                         VALUES (%s, CURRENT_DATE, 'توزيع أرباح شريك', %s, %s, %s, %s, 'USD', 1.0, %s, 'OUT', 'كاش من صندوق المعمل', %s, %s);
                                     """, (f"PAY-MA-{settlement_key}", factory_proj_id, s_mosab_id, v_usd_id, company_net_payable, company_net_payable, f"صرف حصة الشركة من تصفية {settlement_key}", settlement_key))
 
-                        st.success(f"✅ تم إغلاق وتثبيت دورة التصفية بنجاح برقم قيد: {settlement_key}")
+                        st.success(f"تم إغلاق دورة التصفية وتوثيق القيد: {settlement_key}")
                         st.rerun()
                     except Exception as e:
-                        st.error(f"حدث خطأ أثناء ترحيل التصفية: {e}")
+                        st.error(f"خطأ أثناء ترحيل التصفية: {e}")
 
     with tab_history:
-        st.markdown("#### 📜 سجل دورات التصفية التاريخية المعتمدة")
+        st.markdown("#### :material/history_edu: أرشيف دورات التصفية المعتمدة")
         df_history = run_query("""
             SELECT id AS "رقم التصفية", period_start AS "من تاريخ", period_end AS "إلى تاريخ",
                    total_revenue_usd AS "الإيرادات ($)", total_expenses_usd AS "المصاريف ($)",
@@ -205,19 +197,19 @@ def render_stone_factory():
         """)
         if not df_history.empty:
             st.dataframe(df_history.fillna("-"), use_container_width=True, hide_index=True)
-            st.download_button("📥 تصدير أرشيف التصفيات (Excel)", data=to_excel_download_link(df_history, "Factory_Settlements_Archive.xlsx"), file_name="Factory_Settlements_Archive.xlsx")
+            st.download_button("تصدير الأرشيف (Excel)", data=to_excel_download_link(df_history, "Factory_Settlements_Archive.xlsx"), file_name="Factory_Settlements_Archive.xlsx", icon=":material/table_view:")
         else:
-            st.info("لا توجد دورات تصفية مؤرشفة بعد.")
+            st.info("لا توجد دورات تصفية مؤرشفة.")
 
     with tab_tx:
-        st.markdown("#### 📑 سجل الحركات المفصل (مع حالة التصفية)")
+        st.markdown("#### :material/list_alt: سجل الحركات المفصل للمعمل")
         df_fac_txs = run_query("""
             SELECT t.id AS "رقم الفاتورة", t.tx_date AS "التاريخ", t.tx_type AS "نوع الحركة",
                    COALESCE(s.name, 'عام') AS "الطرف المرتبط", t.amount AS "المبلغ",
                    CASE WHEN t.currency = 'USD' THEN 'دولار ($)' ELSE 'ليرة سورية' END AS "العملة",
                    t.amount_usd AS "المعادل بالدولار ($)",
                    CASE WHEN t.direction = 'IN' THEN 'وارد (قبض)' ELSE 'صادر (صرف)' END AS "الاتجاه",
-                   CASE WHEN t.settlement_id IS NOT NULL THEN 'مصفاة 🔒' ELSE 'جارية ⏳' END AS "حالة التصفية",
+                   CASE WHEN t.settlement_id IS NOT NULL THEN 'مصفاة' ELSE 'جارية' END AS "حالة التصفية",
                    t.settlement_id AS "رقم قيد التصفية",
                    t.payment_method AS "طريقة الدفع", t.description AS "البيان"
             FROM transactions t
@@ -227,7 +219,7 @@ def render_stone_factory():
         """, (factory_proj_id,))
         if not df_fac_txs.empty:
             st.dataframe(df_fac_txs.fillna("-"), use_container_width=True, hide_index=True)
-            st.download_button("📥 تصدير سجل المعمل (Excel)", data=to_excel_download_link(df_fac_txs, "Factory_Stone.xlsx"), file_name="Factory_Stone.xlsx")
+            st.download_button("تصدير الحركات (Excel)", data=to_excel_download_link(df_fac_txs, "Factory_Stone.xlsx"), file_name="Factory_Stone.xlsx", icon=":material/table_view:")
         else:
             st.info("لا توجد حركات مسجلة لمعمل الحجر.")
 
@@ -251,7 +243,7 @@ def render_stone_factory():
 
             f_desc = st.text_area("البيان والملاحظات التفصيلية")
 
-            if st.form_submit_button("🚀 حفظ وترحيل الحركة"):
+            if st.form_submit_button("حفظ وترحيل القيد", icon=":material/save:"):
                 if f_amt > 0:
                     s_id_val = int(all_stk_fac.loc[all_stk_fac['name'] == f_stk, 'id'].values[0])
                     v_target_id = v_usd_id if f_curr == 'USD' else v_syp_id
