@@ -76,7 +76,7 @@ def render_stone_factory():
         ":material/account_balance_wallet: أرصدة وسيولة المعمل", 
         ":material/balance: تصفية الأرباح الدورية",
         ":material/history: سجل التصفيات المؤرشفة", 
-        ":material/receipt_long: سجل الحركات", 
+        ":material/list_alt: سجل الحركات", 
         ":material/add_circle: إضافة حركة جديدة"
     ])
 
@@ -125,11 +125,11 @@ def render_stone_factory():
             with st.form("execute_factory_settlement_form"):
                 col_s1, col_s2 = st.columns(2)
                 with col_s1:
-                    settle_notes = st.text_input("ملاحظات دورة التصفية", value=f"تصفية دورية لمعمل الحجر حتى تاريخ {p_end}")
+                    settle_notes = st.text_input("ملاحظات دورة التصفية", placeholder="أدخل توصيف وملاحظات التصفية...")
                     auto_payout = st.checkbox("ترحيل سندات صرف فورية للأرباح المتبقية", value=False)
                 with col_s2:
                     current_user_name = st.session_state.user_info['full_name']
-                    st.text_input("المسؤول المعتمد", value=current_user_name, disabled=True)
+                    st.text_input("المسؤول المعتمد (مقفل)", value=current_user_name, disabled=True)
 
                 if st.form_submit_button("اعتماد التصفية وإغلاق الفترة", icon=":material/check_circle:"):
                     settlement_key = f"SETTLE-FAC-{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -149,7 +149,7 @@ def render_stone_factory():
                                 gross_factory_profit, zakat_deduction, net_distributable,
                                 ahmed_share_75, ahmed_withdrawals, ahmed_net_payable,
                                 company_share_25, mosab_withdrawals, company_net_payable,
-                                current_user_name, settle_notes
+                                current_user_name, settle_notes or "تصفية دورية معتمدة"
                             ))
 
                             cur.execute("""
@@ -230,30 +230,40 @@ def render_stone_factory():
         with st.form("add_fac_tx_form", clear_on_submit=True):
             cf_1, cf_2, cf_3 = st.columns(3)
             with cf_1:
-                f_inv_id = st.text_input("رقم السند", value=auto_fac_id)
+                # الرقم التسلسلي مقفل نهائياً
+                st.text_input("رقم السند (توليد آلي مقفل)", value=auto_fac_id, disabled=True)
                 f_date = st.date_input("التاريخ", datetime.now().date())
-                f_type = st.selectbox("نوع الحركة", ["شراء مواد أولية للمعمل", "مبيعات حجر (قبض من عميل)", "أجور عمال المعمل", "مصاريف ونقل وهدر", "توزيع أرباح شريك (سحب شخصي)", "سداد زكاة"])
+                f_type = st.selectbox(
+                    "نوع الحركة", 
+                    ["شراء مواد أولية للمعمل", "مبيعات حجر (قبض من عميل)", "أجور عمال المعمل", "مصاريف ونقل وهدر", "توزيع أرباح شريك (سحب شخصي)", "سداد زكاة"],
+                    index=None,
+                    placeholder="اختر نوع الحركة..."
+                )
             with cf_2:
-                f_stk = st.selectbox("الطرف / المورد / العميل", all_stk_fac['name'].tolist())
-                f_method = st.selectbox("طريقة الدفع", ["كاش من صندوق المعمل", "حوالة مصرفية", "شيك"])
+                f_stk = st.selectbox("الطرف / المورد / العميل", all_stk_fac['name'].tolist(), index=None, placeholder="اختر الطرف...")
+                f_method = st.selectbox("طريقة الدفع", ["كاش من صندوق المعمل", "حوالة مصرفية", "شيك"], index=None, placeholder="اختر طريقة الدفع...")
             with cf_3:
-                f_curr = st.selectbox("العملة", ["USD", "SYP"])
-                f_rate = st.number_input("سعر الصرف", min_value=1.0, value=1.0 if f_curr == "USD" else 131.0)
-                f_amt = st.number_input("المبلغ", min_value=0.0, step=50.0)
+                f_curr = st.selectbox("العملة", ["USD", "SYP"], index=None, placeholder="اختر العملة...")
+                f_rate = st.number_input("سعر الصرف", min_value=1.0, value=None, placeholder="أدخل سعر الصرف...", step=0.5)
+                f_amt = st.number_input("المبلغ", min_value=0.0, value=None, placeholder="0.00", step=50.0)
 
-            f_desc = st.text_area("البيان والملاحظات التفصيلية")
+            f_desc = st.text_area("البيان والملاحظات التفصيلية", placeholder="أدخل البيان والملاحظات...")
 
             if st.form_submit_button("حفظ وترحيل القيد", icon=":material/save:"):
-                if f_amt > 0:
+                amt_val_f = float(f_amt or 0.0)
+                rate_val_f = float(f_rate or 1.0)
+                if not f_type or not f_stk or not f_method or not f_curr or amt_val_f <= 0:
+                    st.error("يرجى تعبئة كافة الحقول وتحديد الطرف والمبلغ.")
+                else:
                     s_id_val = int(all_stk_fac.loc[all_stk_fac['name'] == f_stk, 'id'].values[0])
                     v_target_id = v_usd_id if f_curr == 'USD' else v_syp_id
                     dir_m = 'IN' if any(k in f_type for k in ['مبيعات', 'قبض']) else 'OUT'
-                    amt_u_val = float(f_amt if f_curr == 'USD' else (f_amt / f_rate))
+                    amt_u_val = float(amt_val_f if f_curr == 'USD' else (amt_val_f / rate_val_f))
 
                     with get_db_cursor(commit=True) as (cur, _):
                         cur.execute("""
                             INSERT INTO transactions (id, tx_date, tx_type, project_id, stakeholder_id, vault_id, amount, currency, exchange_rate, amount_usd, direction, payment_method, description)
                             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
-                        """, (str(f_inv_id), f_date, str(f_type), factory_proj_id, s_id_val, v_target_id, float(f_amt), str(f_curr), float(f_rate), float(amt_u_val), str(dir_m), str(f_method), str(f_desc)))
-                    st.success(f"تم ترحيل السند {f_inv_id} بنجاح.")
+                        """, (str(auto_fac_id), f_date, str(f_type), factory_proj_id, s_id_val, v_target_id, amt_val_f, str(f_curr), rate_val_f, amt_u_val, str(dir_m), str(f_method), f_desc or ""))
+                    st.success(f"تم ترحيل السند {auto_fac_id} بنجاح.")
                     st.rerun()
