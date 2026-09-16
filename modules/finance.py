@@ -1,9 +1,153 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, date
 from core.db import run_query, get_db_cursor
 from core.utils import to_excel_download_link, get_next_invoice_id
 from core.pdf_engine import generate_receipt_pdf
+
+def render_pnl_statement():
+    st.subheader(":material/monitoring: تقرير الأرباح والخسائر الشامل (P&L Income Statement)")
+    st.caption("التحليل المالي الموحد لإيرادات ومصاريف الشركة التشغيلية والإدارية")
+
+    # 1. نطاق التاريخ المالي
+    col_d1, col_d2, col_d3 = st.columns([1.5, 1.5, 2])
+    with col_d1:
+        start_date = st.date_input("من تاريخ", date(date.today().year, 1, 1))
+    with col_d2:
+        end_date = st.date_input("إلى تاريخ", date.today())
+    with col_d3:
+        st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+        period_label = f"الفترة المالية: من {start_date} إلى {end_date}"
+
+    # 2. احتساب الإيرادات التشغيلية
+    with get_db_cursor() as (cur, _):
+        # أ. أتعاب إدارة المشاريع المستحقة عن الفترة
+        cur.execute("""
+            SELECT COALESCE(SUM(ROUND(t.amount_usd * p.management_fee_rate, 2)), 0)
+            FROM projects p 
+            JOIN transactions t ON p.id = t.project_id
+            WHERE t.direction = 'OUT' 
+              AND p.project_type NOT IN ('Internal', 'Factory')
+              AND t.tx_date BETWEEN %s AND %s;
+        """, (start_date, end_date))
+        mgmt_fees_revenue = float(cur.fetchone()[0] or 0.0)
+
+        # ب. حصة الشركة من أرباح معمل الحجر المعتمدة (25%)
+        cur.execute("""
+            SELECT COALESCE(SUM(company_net_payout_usd), 0)
+            FROM factory_settlements
+            WHERE period_end BETWEEN %s AND %s;
+        """, (start_date, end_date))
+        factory_settled_share = float(cur.fetchone()[0] or 0.0)
+
+        # حصة الشركة التقديرية للحركات الجارية غير المصفاة بالمعمل
+        cur.execute("""
+            SELECT 
+                COALESCE(SUM(CASE WHEN direction = 'IN' THEN amount_usd ELSE 0 END), 0) -
+                COALESCE(SUM(CASE WHEN direction = 'OUT' AND tx_type NOT IN ('توزيع أرباح شريك', 'سداد زكاة') THEN amount_usd ELSE 0 END), 0)
+            FROM transactions
+            WHERE project_id = 1 AND settlement_id IS NULL AND tx_date BETWEEN %s AND %s;
+        """, (start_date, end_date))
+        raw_fac_profit = float(cur.fetchone()[0] or 0.0)
+        factory_unsettled_share = (raw_fac_profit * 0.98 * 0.25) if raw_fac_profit > 0 else 0.0
+
+        total_factory_revenue = factory_settled_share + factory_unsettled_share
+
+        # ج. أرباح وخسائر فروقات الصرف المحققة
+        cur.execute("""
+            SELECT 
+                COALESCE(SUM(CASE WHEN fx_gain_loss > 0 THEN fx_gain_loss ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN fx_gain_loss < 0 THEN ABS(fx_gain_loss) ELSE 0 END), 0)
+            FROM transactions
+            WHERE tx_date BETWEEN %s AND %s;
+        """, (start_date, end_date))
+        fx_row = cur.fetchone()
+        fx_gains_syp = float(fx_row[0] or 0.0)
+        fx_losses_syp = float(fx_row[1] or 0.0)
+
+        # الحصول على متوسط سعر الصرف الدفتري لتحويل الفروقات إلى USD
+        cur.execute("SELECT exchange_rate FROM transactions WHERE currency = 'SYP' ORDER BY tx_date DESC LIMIT 1;")
+        rate_rec = cur.fetchone()
+        active_rate = float(rate_rec[0]) if rate_rec else 131.0
+        fx_gains_usd = fx_gains_syp / active_rate if active_rate > 0 else 0.0
+        fx_losses_usd = fx_losses_syp / active_rate if active_rate > 0 else 0.0
+
+        # د. إيرادات عامة وتشغيلية أخرى
+        cur.execute("""
+            SELECT COALESCE(SUM(amount_usd), 0)
+            FROM transactions
+            WHERE tx_type = 'ايراد عام' 
+              AND description NOT LIKE '%راس مال%'
+              AND tx_date BETWEEN %s AND %s;
+        """, (start_date, end_date))
+        other_incomes_usd = float(cur.fetchone()[0] or 0.0)
+
+        # 3. احتساب المصاريف التشغيلية والإدارية
+        # أ. الرواتب والأجور المعتمدة
+        cur.execute("""
+            SELECT COALESCE(SUM(amount_usd), 0)
+            FROM transactions
+            WHERE tx_type = 'راتب او سلفة' 
+              AND project_id != 1
+              AND tx_date BETWEEN %s AND %s;
+        """, (start_date, end_date))
+        payroll_expenses_usd = float(cur.fetchone()[0] or 0.0)
+
+        # ب. المصاريف الإدارية والعمومية وتكاليف المقر
+        cur.execute("""
+            SELECT COALESCE(SUM(amount_usd), 0)
+            FROM transactions
+            WHERE tx_type = 'مصروف عام' 
+              AND project_id != 1
+              AND tx_date BETWEEN %s AND %s;
+        """, (start_date, end_date))
+        general_expenses_usd = float(cur.fetchone()[0] or 0.0)
+
+    # 4. الحسابات الإجمالية والصوافي
+    total_revenues_usd = mgmt_fees_revenue + total_factory_revenue + fx_gains_usd + other_incomes_usd
+    total_expenses_usd = payroll_expenses_usd + general_expenses_usd + fx_losses_usd
+    net_profit_usd = total_revenues_usd - total_expenses_usd
+    profit_margin = (net_profit_usd / total_revenues_usd * 100) if total_revenues_usd > 0 else 0.0
+
+    # 5. عرض مؤشرات الأداء العليا (KPIs)
+    k1, k2, k3, k4 = st.columns(4)
+    with k1:
+        st.markdown(f'<div class="metric-card"><div class="metric-title">إجمالي الإيرادات ($)</div><div class="metric-value-usd">{total_revenues_usd:,.2f} $</div></div>', unsafe_allow_html=True)
+    with k2:
+        st.markdown(f'<div class="metric-card" style="border-top-color: #A29F98;"><div class="metric-title">إجمالي المصاريف التشغيلية ($)</div><div class="metric-value-gold" style="color: #BA1A1A;">{total_expenses_usd:,.2f} $</div></div>', unsafe_allow_html=True)
+    with k3:
+        color_np = "#0F4733" if net_profit_usd >= 0 else "#BA1A1A"
+        st.markdown(f'<div class="metric-card" style="border-top-color: {color_np};"><div class="metric-title">صافي الربح الفعلي للشركة ($)</div><div class="metric-value-usd" style="color: {color_np};">{net_profit_usd:,.2f} $</div></div>', unsafe_allow_html=True)
+    with k4:
+        st.markdown(f'<div class="metric-card" style="border-top-color: #BE9D5F;"><div class="metric-title">هامش الربحية الصافي</div><div class="metric-value-gold">{profit_margin:.1f}%</div></div>', unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # 6. جدول القائمة التفصيلية (P&L Breakdown)
+    pnl_structure = [
+        {"البند المحاسبي": "أولاً: الإيرادات التشغيلية والاستثمارية (Operating Revenues)", "التصنيف": "عنوان رئيسي", "القيمة ($)": ""},
+        {"البند المحاسبي": "  - أتعاب إدارة وتنفيذ المشاريع العقارية", "التصنيف": "إيراد", "القيمة ($)": f"{mgmt_fees_revenue:,.2f}"},
+        {"البند المحاسبي": "  - حصة الشركة من أرباح معمل الحجر الصناعي (25%)", "التصنيف": "إيراد", "القيمة ($)": f"{total_factory_revenue:,.2f}"},
+        {"البند المحاسبي": "  - أرباح فروقات أسعار الصرف المحققة (FX Gains)", "التصنيف": "إيراد", "القيمة ($)": f"{fx_gains_usd:,.2f}"},
+        {"البند المحاسبي": "  - إيرادات استشارية وعامة أخرى", "التصنيف": "إيراد", "القيمة ($)": f"{other_incomes_usd:,.2f}"},
+        {"البند المحاسبي": "مجموع الإيرادات الإجمالية", "التصنيف": "إجمالي وسيط", "القيمة ($)": f"{total_revenues_usd:,.2f}"},
+        {"البند المحاسبي": "ثانياً: المصاريف التشغيلية والإدارية (Operating Expenses)", "التصنيف": "عنوان رئيسي", "القيمة ($)": ""},
+        {"البند المحاسبي": "  - مسيرات الرواتب والأجور الشهرية والمكافآت", "التصنيف": "مصروف", "القيمة ($)": f"{payroll_expenses_usd:,.2f}"},
+        {"البند المحاسبي": "  - مصاريف عمومية وإدارية ونثريات وتجهيز المقر", "التصنيف": "مصروف", "القيمة ($)": f"{general_expenses_usd:,.2f}"},
+        {"البند المحاسبي": "  - خسائر فروقات أسعار الصرف المحققة (FX Losses)", "التصنيف": "مصروف", "القيمة ($)": f"{fx_losses_usd:,.2f}"},
+        {"البند المحاسبي": "مجموع المصاريف التشغيلية", "التصنيف": "إجمالي وسيط", "القيمة ($)": f"{total_expenses_usd:,.2f}"},
+        {"البند المحاسبي": "صافي الربح / الخسارة الصافي للشركة (Net Income)", "التصنيف": "النتيجة النهائية", "القيمة ($)": f"{net_profit_usd:,.2f}"}
+    ]
+
+    df_pnl = pd.DataFrame(pnl_structure)
+    st.dataframe(df_pnl, use_container_width=True, hide_index=True)
+
+    st.download_button(
+        "تصدير قائمة الأرباح والخسائر الرسمية (Excel)", 
+        data=to_excel_download_link(df_pnl, "Income_Statement_PL.xlsx"), 
+        file_name=f"MA_PL_Statement_{start_date}_{end_date}.xlsx", 
+        icon=":material/table_view:"
+    )
 
 def render_vault_transfers(current_user):
     st.subheader(":material/currency_exchange: المصارفة والتحويل المالي بين الصناديق")
@@ -187,7 +331,6 @@ def render_add_invoice(current_user):
             with st.form("simple_tx_form", clear_on_submit=True):
                 ca1, ca2, ca3 = st.columns(3)
                 with ca1:
-                    # مقفل برمجياً بشكل قطعي وغير قابل للتعديل
                     st.text_input("رقم السند", value=auto_inv, disabled=True)
                     t_date = st.date_input("التاريخ", datetime.now().date())
                     t_type = st.selectbox(
@@ -229,7 +372,6 @@ def render_add_invoice(current_user):
         else:
             c1, c2, c3 = st.columns(3)
             with c1:
-                # مقفل برمجياً بشكل قطعي وغير قابل للتعديل
                 st.text_input("رقم الفاتورة", value=auto_inv, disabled=True)
                 t_date_m = st.date_input("التاريخ", datetime.now().date())
             with c2:
