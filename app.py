@@ -27,7 +27,7 @@ from modules.operations import (
 from modules.admin import render_admin
 
 # ----------------------------------------------------
-# 1. إعدادات الصفحة (شاشة كاملة بدون سايدبار)
+# 1. إعدادات الصفحة
 # ----------------------------------------------------
 logo_filename = "MA Logo.png" if os.path.exists("MA Logo.png") else None
 
@@ -39,7 +39,7 @@ st.set_page_config(
 )
 
 # ----------------------------------------------------
-# 2. الهوية البصرية وإلغاء الـ Sidebar نهائياً
+# 2. الهوية البصرية وضبط استقرار الحاويات
 # ----------------------------------------------------
 st.markdown("""
     <style>
@@ -72,7 +72,7 @@ st.markdown("""
         text-align: left !important;
     }
 
-    /* إخفاء الـ Sidebar والـ Header والفوتر نهائياً لتفريغ المساحة بالكامل */
+    /* إخفاء السايدبار والهيدر الأصلي */
     [data-testid="stSidebar"], 
     [data-testid="collapsedControl"], 
     header[data-testid="stHeader"],
@@ -89,31 +89,19 @@ st.markdown("""
         background-color: #F9F9F8 !important; 
     }
 
-    /* بطاقات القطاعات الرئيسية في لوحة البوابة */
-    .hub-category-card {
-        background: #FFFFFF;
-        border: 1px solid #D0D7DE;
-        border-top: 4px solid #0F4733;
-        border-radius: 8px;
-        padding: 16px;
-        margin-bottom: 20px;
-        box-shadow: 0 1px 3px rgba(31, 35, 40, 0.04);
-        min-height: 240px;
-    }
-    
-    .hub-category-title {
-        color: #0F4733;
-        font-size: 1.05rem;
-        font-weight: 800;
-        margin-bottom: 12px;
-        border-bottom: 1px solid #E1E4E8;
-        padding-bottom: 6px;
-        display: flex;
-        align-items: center;
-        gap: 6px;
+    /* تنسيق الحاويات المؤطرة لتطابق النمط المؤسسي النظيف */
+    [data-testid="stVerticalBlockBorderWrapper"] {
+        background-color: #FFFFFF !important;
+        border: 1px solid #D0D7DE !important;
+        border-top: 4px solid #0F4733 !important;
+        border-radius: 8px !important;
+        box-shadow: 0 1px 3px rgba(31, 35, 40, 0.05) !important;
+        padding: 14px !important;
+        margin-bottom: 12px !important;
+        height: 100% !important;
     }
 
-    /* بطاقات المؤشرات الرقمية */
+    /* بطاقات المؤشرات */
     .metric-card { 
         background: #FFFFFF; 
         border-radius: 6px; 
@@ -158,10 +146,11 @@ st.markdown("""
         color: #FFFFFF !important; 
         border: 1px solid #0F4733 !important; 
         border-radius: 6px !important; 
-        padding: 5px 18px !important; 
+        padding: 6px 18px !important; 
         font-weight: 600 !important; 
         font-size: 0.9rem !important;
         box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        margin-top: 4px !important;
     }
     .stButton > button:hover, .stDownloadButton > button:hover { 
         background-color: #BE9D5F !important; 
@@ -293,18 +282,31 @@ else:
         "كشف حسابي ودوامي الذاتي"
     ]
 
+# هيكلة القطاعات مع التوصيف لملء الحاويات وظيفياً
 MODULE_CATALOG = [
     {
         "category": "لوحة القيادة والمؤشرات",
         "icon": ":material/dashboard:",
+        "desc": "مراقبة السيولة النقدية، حركة الصناديق، وحسابات معمل الحجر المستقلة.",
         "items": [
             {"title": "لوحة المؤشرات العامة والأرصدة", "icon": ":material/analytics:"},
             {"title": factory_menu_title, "icon": ":material/precision_manufacturing:"},
         ]
     },
     {
+        "category": "المشاريع والشركاء",
+        "icon": ":material/domain:",
+        "desc": "إدارة تكاليف المشاريع، أتعاب الإدارة، كشوفات المستثمرين، وهيكل رأس المال.",
+        "items": [
+            {"title": "حسابات المشاريع والمستثمرين", "icon": ":material/domain_verification:"},
+            {"title": "كشوفات حسابات المستثمرين", "icon": ":material/manage_accounts:"},
+            {"title": "هيكل الشركاء ورأس المال والأرباح", "icon": ":material/handshake:"},
+        ]
+    },
+    {
         "category": "العمليات المالية والمحاسبة",
         "icon": ":material/account_balance:",
+        "desc": "تسجيل الفواتير الذري، دفتر القيود العام، الصرافة الداخلية، وإصدار السندات.",
         "items": [
             {"title": "إضافة فاتورة وحركة متعددة البنود", "icon": ":material/post_add:"},
             {"title": "دفتر الحركات وسجل الفواتير", "icon": ":material/receipt_long:"},
@@ -314,17 +316,9 @@ MODULE_CATALOG = [
         ]
     },
     {
-        "category": "المشاريع والشركاء",
-        "icon": ":material/domain:",
-        "items": [
-            {"title": "حسابات المشاريع والمستثمرين", "icon": ":material/domain_verification:"},
-            {"title": "كشوفات حسابات المستثمرين", "icon": ":material/manage_accounts:"},
-            {"title": "هيكل الشركاء ورأس المال والأرباح", "icon": ":material/handshake:"},
-        ]
-    },
-    {
         "category": "الموارد البشرية والمكتب",
         "icon": ":material/badge:",
+        "desc": "تتبع سجلات الحضور والانصراف، احتساب مسيرات الرواتب، وسجل الزيارات.",
         "items": [
             {"title": "جدول دوامات وساعات العمل", "icon": ":material/schedule:"},
             {"title": "مسيرات الرواتب الشهرية", "icon": ":material/payments:"},
@@ -335,6 +329,7 @@ MODULE_CATALOG = [
     {
         "category": "المستودع والإدارة العامة",
         "icon": ":material/settings:",
+        "desc": "جرد وحركات المواد والمخزون، دليل الأطراف والموردين، وضبط المستخدمين.",
         "items": [
             {"title": "إدارة المخزون ومواد المشاريع", "icon": ":material/inventory_2:"},
             {"title": "دليل وتعديل بيانات الأطراف", "icon": ":material/group:"},
@@ -343,7 +338,7 @@ MODULE_CATALOG = [
     },
 ]
 
-# تصفية الكتالوج وفق الصلاحيات
+# تصفية القطاعات وفق الصلاحيات
 user_categories = []
 for cat in MODULE_CATALOG:
     valid_items = [it for it in cat["items"] if it["title"] in allowed_menus]
@@ -351,15 +346,15 @@ for cat in MODULE_CATALOG:
         user_categories.append({
             "category": cat["category"],
             "icon": cat["icon"],
+            "desc": cat["desc"],
             "items": valid_items
         })
 
-# حالة الشاشة النشطة
 if "current_page" not in st.session_state:
     st.session_state.current_page = "HOME"
 
 # ----------------------------------------------------
-# 5. شريط المسار العلوي الموحد (Navigation & Breadcrumbs Bar)
+# 5. شريط المسار العلوي الموحد
 # ----------------------------------------------------
 col_b1, col_b2, col_b3 = st.columns([1.2, 2.8, 1])
 
@@ -383,7 +378,6 @@ with col_b2:
             </div>
         """, unsafe_allow_html=True)
     else:
-        # البحث عن اسم القطاع
         cat_title = "القطاع المالي"
         for c in user_categories:
             if any(it["title"] == st.session_state.current_page for it in c["items"]):
@@ -415,34 +409,52 @@ with col_b3:
 st.markdown("<hr style='border: 0.5px solid #D0D7DE; margin-top: 10px; margin-bottom: 20px;'>", unsafe_allow_html=True)
 
 # ----------------------------------------------------
-# 6. شاشة البوابة الرئيسية (HOME HUB)
+# 6. شاشة البوابة المركزية بهندسة متوازنة (2 + 3 Grid)
 # ----------------------------------------------------
+def render_category_card(cat):
+    with st.container(border=True):
+        st.markdown(f"#### {cat['icon']} {cat['category']}")
+        st.caption(cat["desc"])
+        st.markdown("<hr style='margin: 8px 0; border: 0.5px solid #E1E4E8;'>", unsafe_allow_html=True)
+        for it in cat["items"]:
+            if st.button(it["title"], icon=it["icon"], use_container_width=True, key=f"portal_btn_{it['title']}"):
+                st.session_state.current_page = it["title"]
+                st.rerun()
+
 if st.session_state.current_page == "HOME":
-    st.markdown("### :material/grid_view: بوابة الوصول السريع لمنظومة العمل")
-    st.caption("حدد القطاع أو الشاشة المطلوبة لمباشرة العمليات:")
+    st.markdown("### :material/grid_view: بوابة العمليات والقطاعات التنفيذية")
+    st.caption("حدد القطاع أو الشاشة المطلوبة للبدء المباشر:")
 
-    # توزيع القطاعات كشبكة تفاعلية (Grid of Category Hubs)
-    cols = st.columns(3)
-    
-    for idx, cat in enumerate(user_categories):
-        col_target = cols[idx % 3]
-        with col_target:
-            st.markdown(f"""
-                <div class="hub-category-card">
-                    <div class="hub-category-title">
-                        {cat['icon']} {cat['category']}
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            for it in cat["items"]:
-                if st.button(it["title"], icon=it["icon"], use_container_width=True, key=f"hub_btn_{it['title']}"):
-                    st.session_state.current_page = it["title"]
-                    st.rerun()
-            st.markdown("<br>", unsafe_allow_html=True)
+    # إذا كانت القطاعات مكتملة (5 قطاعات): تطبيق المعمارية المتوازنة (2 في الأعلى + 3 في الأسفل)
+    if len(user_categories) == 5:
+        # الصف الأول: القطاعات الاستراتيجية (نصفين متطابقين 50% / 50%)
+        row1_c1, row1_c2 = st.columns(2)
+        with row1_c1:
+            render_category_card(user_categories[0])
+        with row1_c2:
+            render_category_card(user_categories[1])
+
+        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+
+        # الصف الثاني: القطاعات التشغيلية (3 أثلاث متطابقة 33% / 33% / 33%)
+        row2_c1, row2_c2, row2_c3 = st.columns(3)
+        with row2_c1:
+            render_category_card(user_categories[2])
+        with row2_c2:
+            render_category_card(user_categories[3])
+        with row2_c3:
+            render_category_card(user_categories[4])
+
+    else:
+        # شبكة متجاوبة ديناميكية لأصحاب الصلاحيات المحدودة (مستخدمين عاديين / سكرتاريا)
+        cols_count = min(len(user_categories), 3)
+        dyn_cols = st.columns(cols_count)
+        for idx, cat in enumerate(user_categories):
+            with dyn_cols[idx % cols_count]:
+                render_category_card(cat)
 
 # ----------------------------------------------------
-# 7. توجيه الشاشات التابعة (Spokes)
+# 7. توجيه الشاشات التابعة
 # ----------------------------------------------------
 else:
     target = st.session_state.current_page
