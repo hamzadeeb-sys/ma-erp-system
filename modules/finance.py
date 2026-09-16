@@ -17,11 +17,16 @@ def render_pnl_statement():
         end_date = st.date_input("إلى تاريخ", date.today())
     with col_d3:
         st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-        period_label = f"الفترة المالية: من {start_date} إلى {end_date}"
+        st.caption(f"الفترة المعتمدة: من {start_date} إلى {end_date}")
 
-    # 2. احتساب الإيرادات التشغيلية
+    # 2. احتساب الإيرادات والمصاريف
     with get_db_cursor() as (cur, _):
-        # أ. أتعاب إدارة المشاريع المستحقة عن الفترة
+        # التحقق من معرف مشروع المعمل لتفادي التثبيت العشوائي
+        cur.execute("SELECT id FROM projects WHERE name = 'معمل الحجر الصناعي' LIMIT 1;")
+        fac_proj_res = cur.fetchone()
+        factory_proj_id = int(fac_proj_res[0]) if fac_proj_res else 1
+
+        # أ. أتعاب إدارة المشاريع المستحقة
         cur.execute("""
             SELECT COALESCE(SUM(ROUND(t.amount_usd * p.management_fee_rate, 2)), 0)
             FROM projects p 
@@ -32,7 +37,7 @@ def render_pnl_statement():
         """, (start_date, end_date))
         mgmt_fees_revenue = float(cur.fetchone()[0] or 0.0)
 
-        # ب. حصة الشركة من أرباح معمل الحجر المعتمدة (25%)
+        # ب. حصة الشركة من معمل الحجر (المعتمدة + الجارية)
         cur.execute("""
             SELECT COALESCE(SUM(company_net_payout_usd), 0)
             FROM factory_settlements
@@ -40,20 +45,19 @@ def render_pnl_statement():
         """, (start_date, end_date))
         factory_settled_share = float(cur.fetchone()[0] or 0.0)
 
-        # حصة الشركة التقديرية للحركات الجارية غير المصفاة بالمعمل
         cur.execute("""
             SELECT 
                 COALESCE(SUM(CASE WHEN direction = 'IN' THEN amount_usd ELSE 0 END), 0) -
                 COALESCE(SUM(CASE WHEN direction = 'OUT' AND tx_type NOT IN ('توزيع أرباح شريك', 'سداد زكاة') THEN amount_usd ELSE 0 END), 0)
             FROM transactions
-            WHERE project_id = 1 AND settlement_id IS NULL AND tx_date BETWEEN %s AND %s;
-        """, (start_date, end_date))
+            WHERE project_id = %s AND settlement_id IS NULL AND tx_date BETWEEN %s AND %s;
+        """, (factory_proj_id, start_date, end_date))
         raw_fac_profit = float(cur.fetchone()[0] or 0.0)
         factory_unsettled_share = (raw_fac_profit * 0.98 * 0.25) if raw_fac_profit > 0 else 0.0
 
         total_factory_revenue = factory_settled_share + factory_unsettled_share
 
-        # ج. أرباح وخسائر فروقات الصرف المحققة
+        # ج. أرباح وخسائر الصرافة
         cur.execute("""
             SELECT 
                 COALESCE(SUM(CASE WHEN fx_gain_loss > 0 THEN fx_gain_loss ELSE 0 END), 0),
@@ -65,65 +69,63 @@ def render_pnl_statement():
         fx_gains_syp = float(fx_row[0] or 0.0)
         fx_losses_syp = float(fx_row[1] or 0.0)
 
-        # الحصول على متوسط سعر الصرف الدفتري لتحويل الفروقات إلى USD
         cur.execute("SELECT exchange_rate FROM transactions WHERE currency = 'SYP' ORDER BY tx_date DESC LIMIT 1;")
         rate_rec = cur.fetchone()
-        active_rate = float(rate_rec[0]) if rate_rec else 131.0
+        active_rate = float(rate_rec[0]) if (rate_rec and rate_rec[0]) else 131.0
         fx_gains_usd = fx_gains_syp / active_rate if active_rate > 0 else 0.0
         fx_losses_usd = fx_losses_syp / active_rate if active_rate > 0 else 0.0
 
-        # د. إيرادات عامة وتشغيلية أخرى
+        # د. إيرادات عامة (مع تمرير نمط البحث كـ parameter آمن لحل IndexError)
         cur.execute("""
             SELECT COALESCE(SUM(amount_usd), 0)
             FROM transactions
             WHERE tx_type = 'ايراد عام' 
-              AND description NOT LIKE '%راس مال%'
+              AND (description IS NULL OR description NOT LIKE %s)
               AND tx_date BETWEEN %s AND %s;
-        """, (start_date, end_date))
+        """, ('%راس مال%', start_date, end_date))
         other_incomes_usd = float(cur.fetchone()[0] or 0.0)
 
-        # 3. احتساب المصاريف التشغيلية والإدارية
-        # أ. الرواتب والأجور المعتمدة
+        # هـ. مصاريف الرواتب والأجور
         cur.execute("""
             SELECT COALESCE(SUM(amount_usd), 0)
             FROM transactions
             WHERE tx_type = 'راتب او سلفة' 
-              AND project_id != 1
+              AND (project_id != %s OR project_id IS NULL)
               AND tx_date BETWEEN %s AND %s;
-        """, (start_date, end_date))
+        """, (factory_proj_id, start_date, end_date))
         payroll_expenses_usd = float(cur.fetchone()[0] or 0.0)
 
-        # ب. المصاريف الإدارية والعمومية وتكاليف المقر
+        # و. المصاريف العامة والتشغيلية
         cur.execute("""
             SELECT COALESCE(SUM(amount_usd), 0)
             FROM transactions
             WHERE tx_type = 'مصروف عام' 
-              AND project_id != 1
+              AND (project_id != %s OR project_id IS NULL)
               AND tx_date BETWEEN %s AND %s;
-        """, (start_date, end_date))
+        """, (factory_proj_id, start_date, end_date))
         general_expenses_usd = float(cur.fetchone()[0] or 0.0)
 
-    # 4. الحسابات الإجمالية والصوافي
+    # 3. الحسابات الصافية
     total_revenues_usd = mgmt_fees_revenue + total_factory_revenue + fx_gains_usd + other_incomes_usd
     total_expenses_usd = payroll_expenses_usd + general_expenses_usd + fx_losses_usd
     net_profit_usd = total_revenues_usd - total_expenses_usd
     profit_margin = (net_profit_usd / total_revenues_usd * 100) if total_revenues_usd > 0 else 0.0
 
-    # 5. عرض مؤشرات الأداء العليا (KPIs)
+    # 4. المؤشرات العلوية
     k1, k2, k3, k4 = st.columns(4)
     with k1:
         st.markdown(f'<div class="metric-card"><div class="metric-title">إجمالي الإيرادات ($)</div><div class="metric-value-usd">{total_revenues_usd:,.2f} $</div></div>', unsafe_allow_html=True)
     with k2:
-        st.markdown(f'<div class="metric-card" style="border-top-color: #A29F98;"><div class="metric-title">إجمالي المصاريف التشغيلية ($)</div><div class="metric-value-gold" style="color: #BA1A1A;">{total_expenses_usd:,.2f} $</div></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="metric-card" style="border-top-color: #A29F98;"><div class="metric-title">إجمالي المصاريف ($)</div><div class="metric-value-gold" style="color: #BA1A1A;">{total_expenses_usd:,.2f} $</div></div>', unsafe_allow_html=True)
     with k3:
         color_np = "#0F4733" if net_profit_usd >= 0 else "#BA1A1A"
-        st.markdown(f'<div class="metric-card" style="border-top-color: {color_np};"><div class="metric-title">صافي الربح الفعلي للشركة ($)</div><div class="metric-value-usd" style="color: {color_np};">{net_profit_usd:,.2f} $</div></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="metric-card" style="border-top-color: {color_np};"><div class="metric-title">صافي الربح الفعلي ($)</div><div class="metric-value-usd" style="color: {color_np};">{net_profit_usd:,.2f} $</div></div>', unsafe_allow_html=True)
     with k4:
         st.markdown(f'<div class="metric-card" style="border-top-color: #BE9D5F;"><div class="metric-title">هامش الربحية الصافي</div><div class="metric-value-gold">{profit_margin:.1f}%</div></div>', unsafe_allow_html=True)
 
     st.markdown("---")
 
-    # 6. جدول القائمة التفصيلية (P&L Breakdown)
+    # 5. جدول القائمة المحاسبية
     pnl_structure = [
         {"البند المحاسبي": "أولاً: الإيرادات التشغيلية والاستثمارية (Operating Revenues)", "التصنيف": "عنوان رئيسي", "القيمة ($)": ""},
         {"البند المحاسبي": "  - أتعاب إدارة وتنفيذ المشاريع العقارية", "التصنيف": "إيراد", "القيمة ($)": f"{mgmt_fees_revenue:,.2f}"},
